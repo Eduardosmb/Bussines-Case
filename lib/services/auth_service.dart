@@ -25,6 +25,11 @@ class AuthService {
     return digest.toString();
   }
 
+  // Public method for mock data creation
+  String hashPassword(String password) {
+    return _hashPassword(password);
+  }
+
   // Validate email format
   bool _isValidEmail(String email) {
     return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email);
@@ -294,6 +299,16 @@ Download the app now and start earning!
     await prefs.remove(_usersKey);
     await prefs.remove(_currentUserKey);
     await prefs.setBool(_isLoggedInKey, false);
+  }
+
+  // Store user directly (for mock data)
+  Future<void> storeUserDirectly(User user, String password) async {
+    final users = await _getStoredUsers();
+    users[user.email.toLowerCase()] = {
+      'user': user.toJson(),
+      'passwordHash': _hashPassword(password),
+    };
+    await _saveUsers(users);
   }
 }
 

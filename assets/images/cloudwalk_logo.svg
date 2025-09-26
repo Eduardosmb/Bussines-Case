@@ -1,0 +1,41 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- CloudWalk logo - exact replica based on provided image -->
+  <g transform="translate(10,10)">
+    <!-- Circular base -->
+    <circle cx="20" cy="20" r="20" fill="#000000"/>
+    
+    <!-- Curved horizontal lines pattern -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="2">
+      <path d="M 2 10 Q 20 5, 38 10"/>
+      <path d="M 2 13 Q 20 8, 38 13"/>
+      <path d="M 2 16 Q 20 11, 38 16"/>
+      <path d="M 2 19 Q 20 14, 38 19"/>
+      <path d="M 2 22 Q 20 17, 38 22"/>
+      <path d="M 2 25 Q 20 20, 38 25"/>
+      <path d="M 2 28 Q 20 23, 38 28"/>
+      <path d="M 2 31 Q 20 26, 38 31"/>
+    </g>
+    
+    <!-- Mask to create circular boundary -->
+    <defs>
+      <clipPath id="circleClip">
+        <circle cx="20" cy="20" r="19"/>
+      </clipPath>
+    </defs>
+    <g clip-path="url(#circleClip)">
+      <g fill="none" stroke="#FFFFFF" stroke-width="2">
+        <path d="M 2 10 Q 20 5, 38 10"/>
+        <path d="M 2 13 Q 20 8, 38 13"/>
+        <path d="M 2 16 Q 20 11, 38 16"/>
+        <path d="M 2 19 Q 20 14, 38 19"/>
+        <path d="M 2 22 Q 20 17, 38 22"/>
+        <path d="M 2 25 Q 20 20, 38 25"/>
+        <path d="M 2 28 Q 20 23, 38 28"/>
+        <path d="M 2 31 Q 20 26, 38 31"/>
+      </g>
+    </g>
+  </g>
+  
+  <!-- CloudWalk text exactly as shown -->
+  <text x="60" y="35" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#000000">cloudwalk</text>
+</svg>

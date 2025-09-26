@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'models/user.dart';
 import 'models/achievement.dart';
 import 'services/auth_service.dart';
 import 'services/achievement_service.dart';
+import 'services/mock_data_service.dart';
 
 void main() {
   runApp(const ReferralApp());
@@ -77,10 +79,51 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-class WelcomeScreen extends StatelessWidget {
+class WelcomeScreen extends StatefulWidget {
   final Function(User?) onAuthChanged;
 
   const WelcomeScreen({super.key, required this.onAuthChanged});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> {
+  bool _isCreatingMockData = false;
+
+  Future<void> _createMockData() async {
+    setState(() => _isCreatingMockData = true);
+    
+    try {
+      await MockDataService.populateMockData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Mock data created! You can now test with sample users.'),
+            backgroundColor: Color(0xFF059669),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        // Print test credentials to console
+        MockDataService.printTestCredentials();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error creating mock data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingMockData = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,8 +134,8 @@ class WelcomeScreen extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6C5CE7),
-              Color(0xFF74B9FF),
+              Color(0xFF1F2937),
+              Color(0xFF374151),
             ],
           ),
         ),
@@ -103,10 +146,9 @@ class WelcomeScreen extends StatelessWidget {
               children: [
                 const Spacer(),
                 
-                // App Logo
+                // CloudWalk Logo
                 Container(
-                  width: 120,
-                  height: 120,
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
@@ -118,10 +160,10 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.people_alt_rounded,
-                    size: 64,
-                    color: Color(0xFF6C5CE7),
+                  child: SvgPicture.asset(
+                    'assets/images/cloudwalk_logo.svg',
+                    height: 60,
+                    width: 200,
                   ),
                 ),
                 
@@ -129,7 +171,7 @@ class WelcomeScreen extends StatelessWidget {
                 
                 // App Title
                 Text(
-                  'ReferralApp',
+                  'Referral Program',
                   style: Theme.of(context).textTheme.displayLarge?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -147,21 +189,65 @@ class WelcomeScreen extends StatelessWidget {
                 
                 const Spacer(),
                 
+                // Mock Data Button (for testing)
+                if (!_isCreatingMockData) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _createMockData,
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Create Mock Data for Testing'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white, width: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          SizedBox(width: 16),
+                          Text(
+                            'Creating mock users...',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
                 // Action Buttons
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: _isCreatingMockData ? null : () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => LoginScreen(onAuthChanged: onAuthChanged),
+                          builder: (context) => LoginScreen(onAuthChanged: widget.onAuthChanged),
                         ),
                       );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF6C5CE7),
+                      foregroundColor: const Color(0xFF1F2937),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -182,11 +268,11 @@ class WelcomeScreen extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
-                    onPressed: () {
+                    onPressed: _isCreatingMockData ? null : () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => RegisterScreen(onAuthChanged: onAuthChanged),
+                          builder: (context) => RegisterScreen(onAuthChanged: widget.onAuthChanged),
                         ),
                       );
                     },
@@ -788,6 +874,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Achievement> _achievements = [];
   List<LeaderboardEntry> _leaderboard = [];
   bool _isLoading = true;
+  bool _isRewardsExpanded = false;
+  bool _isAccountInfoExpanded = false;
 
   @override
   void initState() {
@@ -799,6 +887,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final achievements = await _achievementService.getUserAchievements(widget.user.id);
       final leaderboard = await _achievementService.getLeaderboard();
+      
+      // Sort achievements: unlocked first, then locked
+      achievements.sort((a, b) {
+        if (a.isUnlocked && !b.isUnlocked) return -1;
+        if (!a.isUnlocked && b.isUnlocked) return 1;
+        return 0; // Keep original order within unlocked/locked groups
+      });
       
       setState(() {
         _achievements = achievements;
@@ -819,8 +914,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       for (final achievement in newAchievements) {
         _showAchievementUnlockedDialog(achievement);
       }
-      // Refresh achievements list
+      // Refresh achievements list and sort again
       final updatedAchievements = await _achievementService.getUserAchievements(widget.user.id);
+      
+      // Sort achievements: unlocked first, then locked
+      updatedAchievements.sort((a, b) {
+        if (a.isUnlocked && !b.isUnlocked) return -1;
+        if (!a.isUnlocked && b.isUnlocked) return 1;
+        return 0; // Keep original order within unlocked/locked groups
+      });
+      
       setState(() => _achievements = updatedAchievements);
     }
   }
@@ -829,7 +932,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome, ${widget.user.firstName}!'),
+        title: Row(
+          children: [
+            SvgPicture.asset(
+              'assets/images/cloudwalk_logo.svg',
+              height: 32,
+              width: 100,
+            ),
+            const SizedBox(width: 12),
+            Text('Welcome, ${widget.user.firstName}!'),
+          ],
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1F2937),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         actions: [
           IconButton(
             icon: const Icon(Icons.emoji_events),
@@ -876,21 +993,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Welcome Card
+            // 1. REFERRAL CODE SECTION - First priority
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6C5CE7), Color(0xFF74B9FF)],
+                  colors: [Color(0xFF1F2937), Color(0xFF374151)], // CloudWalk dark gradient
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1F2937).withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // CloudWalk branding
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: SvgPicture.asset(
+                          'assets/images/cloudwalk_logo.svg',
+                          height: 20,
+                          width: 60,
+                          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CloudWalk',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Referral Program',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   Text(
                     'Your Referral Code',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -914,7 +1076,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onPressed: () => _copyReferralCode(context, widget.user),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF6C5CE7),
+                            foregroundColor: const Color(0xFF1F2937),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -933,6 +1096,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withOpacity(0.2),
                             foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
@@ -950,57 +1114,137 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             
-            // Rewards Info Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00B894).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF00B894).withOpacity(0.2)),
-              ),
+            // 2. BALANCE SECTION
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    context,
+                    'Total Referrals',
+                    '${widget.user.totalReferrals}',
+                    Icons.people,
+                    const Color(0xFF1F2937), // CloudWalk dark gray
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildStatCard(
+                    context,
+                    'Total Earnings',
+                    '\$${widget.user.totalEarnings.toStringAsFixed(2)}',
+                    Icons.attach_money,
+                    const Color(0xFF6B7280), // CloudWalk light gray
+                  ),
+                ),
+              ],
+            ),
+            
+            
+            // Rewards Info Card (Expandable)
+            Card(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.monetization_on,
-                        color: const Color(0xFF00B894),
-                        size: 24,
+                  ListTile(
+                    leading: const Icon(
+                      Icons.monetization_on,
+                      color: Color(0xFF1F2937),
+                    ),
+                    title: const Text(
+                      'CloudWalk Rewards Program',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Rewards Program',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF00B894),
-                        ),
+                    ),
+                    trailing: Icon(
+                      _isRewardsExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: const Color(0xFF1F2937),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _isRewardsExpanded = !_isRewardsExpanded;
+                      });
+                    },
+                  ),
+                  if (_isRewardsExpanded)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          Text(
+                            '💰 \$25 bonus when you join with a referral code\n'
+                            '🎯 \$50 for each friend you refer\n'
+                            '🚀 Your friends get \$25 when they use your code!',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '💰 \$25 bonus when you join with a referral code\n'
-                    '🎯 \$50 for each friend you refer\n'
-                    '🚀 Your friends get \$25 when they use your code!',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                    ),
                 ],
               ),
             ),
             
             const SizedBox(height: 32),
             
-            // Achievements Preview
+            // 2. USER INFORMATION SECTION (Expandable)
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.account_circle,
+                      color: Color(0xFF1F2937),
+                    ),
+                    title: const Text(
+                      'Account Information',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    trailing: Icon(
+                      _isAccountInfoExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: const Color(0xFF1F2937),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _isAccountInfoExpanded = !_isAccountInfoExpanded;
+                      });
+                    },
+                  ),
+                  if (_isAccountInfoExpanded)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          _buildInfoRow('Name', widget.user.fullName),
+                          _buildInfoRow('Email', widget.user.email),
+                          _buildInfoRow('Member Since', _formatDate(widget.user.createdAt)),
+                          _buildInfoRow('Referral Code', widget.user.referralCode),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // 3. ACHIEVEMENTS SECTION
             if (!_isLoading && _achievements.isNotEmpty) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Recent Achievements',
+                    'Achievements',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -1029,65 +1273,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 32),
             ],
-            
-            // User Info Card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Account Information',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Name', widget.user.fullName),
-                    _buildInfoRow('Email', widget.user.email),
-                    _buildInfoRow('Member Since', _formatDate(widget.user.createdAt)),
-                    _buildInfoRow('Referral Code', widget.user.referralCode),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Stats Overview
-            Text(
-              'Your Stats',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    'Total Referrals',
-                    '${widget.user.totalReferrals}',
-                    Icons.people,
-                    const Color(0xFF6C5CE7),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    'Total Earnings',
-                    '\$${widget.user.totalEarnings.toStringAsFixed(2)}',
-                    Icons.attach_money,
-                    const Color(0xFF00B894),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -1260,6 +1445,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Show achievements dialog
   void _showAchievementsDialog() {
+    // Sort achievements for dialog display: unlocked first
+    final sortedAchievements = List<Achievement>.from(_achievements);
+    sortedAchievements.sort((a, b) {
+      if (a.isUnlocked && !b.isUnlocked) return -1;
+      if (!a.isUnlocked && b.isUnlocked) return 1;
+      return 0;
+    });
+    
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -1285,9 +1478,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisSpacing: 12,
                     childAspectRatio: 1,
                   ),
-                  itemCount: _achievements.length,
+                  itemCount: sortedAchievements.length,
                   itemBuilder: (context, index) {
-                    final achievement = _achievements[index];
+                    final achievement = sortedAchievements[index];
                     return _buildAchievementCard(achievement);
                   },
                 ),
@@ -1474,18 +1667,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           height: 60,
           decoration: BoxDecoration(
             color: achievement.isUnlocked
-                ? const Color(0xFF00B894)
+                ? const Color(0xFF1F2937) // CloudWalk dark
                 : Colors.grey[300],
             shape: BoxShape.circle,
+            boxShadow: achievement.isUnlocked
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF1F2937).withOpacity(0.3), // CloudWalk dark
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
           ),
           child: Center(
-            child: Text(
-              achievement.icon,
-              style: TextStyle(
-                fontSize: 24,
-                color: achievement.isUnlocked ? null : Colors.grey[600],
-              ),
-            ),
+            child: achievement.isUnlocked
+                ? Text(
+                    achievement.icon,
+                    style: const TextStyle(
+                      fontSize: 24,
+                    ),
+                  )
+                : ColorFiltered(
+                    colorFilter: const ColorFilter.matrix([
+                      0.2126, 0.7152, 0.0722, 0, 0, // Red channel
+                      0.2126, 0.7152, 0.0722, 0, 0, // Green channel
+                      0.2126, 0.7152, 0.0722, 0, 0, // Blue channel
+                      0,      0,      0,      1, 0, // Alpha channel
+                    ]),
+                    child: Text(
+                      achievement.icon,
+                      style: const TextStyle(
+                        fontSize: 24,
+                      ),
+                    ),
+                  ),
           ),
         ),
         const SizedBox(height: 8),
@@ -1494,7 +1710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: achievement.isUnlocked ? null : Colors.grey[600],
+            color: achievement.isUnlocked ? Colors.black87 : Colors.grey[600],
           ),
           textAlign: TextAlign.center,
           maxLines: 1,
@@ -1516,10 +1732,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                Text(
-                  achievement.icon,
-                  style: const TextStyle(fontSize: 24),
-                ),
+                achievement.isUnlocked
+                    ? Text(
+                        achievement.icon,
+                        style: const TextStyle(fontSize: 24),
+                      )
+                    : ColorFiltered(
+                        colorFilter: const ColorFilter.matrix([
+                          0.2126, 0.7152, 0.0722, 0, 0, // Red channel
+                          0.2126, 0.7152, 0.0722, 0, 0, // Green channel
+                          0.2126, 0.7152, 0.0722, 0, 0, // Blue channel
+                          0,      0,      0,      1, 0, // Alpha channel
+                        ]),
+                        child: Text(
+                          achievement.icon,
+                          style: const TextStyle(fontSize: 24),
+                        ),
+                      ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1555,7 +1784,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               LinearProgressIndicator(
                 value: progress,
                 backgroundColor: Colors.grey[300],
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C5CE7)),
+                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1F2937)), // CloudWalk dark
               ),
               const SizedBox(height: 4),
               Text(
@@ -1566,7 +1795,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00B894).withOpacity(0.1),
+                  color: const Color(0xFF6B7280).withOpacity(0.1), // CloudWalk gray
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -1574,7 +1803,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF00B894),
+                    color: Color(0xFF6B7280), // CloudWalk gray
                   ),
                 ),
               ),
@@ -1613,10 +1842,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isCurrentUser ? const Color(0xFF6C5CE7).withOpacity(0.1) : null,
+        color: isCurrentUser ? const Color(0xFF1F2937).withOpacity(0.1) : null, // CloudWalk dark
         borderRadius: BorderRadius.circular(8),
         border: isCurrentUser 
-            ? Border.all(color: const Color(0xFF6C5CE7), width: 2)
+            ? Border.all(color: const Color(0xFF1F2937), width: 2) // CloudWalk dark
             : Border.all(color: Colors.grey[300]!),
       ),
       child: Row(
@@ -1649,7 +1878,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       entry.userName,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isCurrentUser ? const Color(0xFF6C5CE7) : null,
+                        color: isCurrentUser ? const Color(0xFF1F2937) : null, // CloudWalk dark
                       ),
                     ),
                     if (isCurrentUser) ...[
@@ -1657,7 +1886,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const Text(
                         '(You)',
                         style: TextStyle(
-                          color: Color(0xFF6C5CE7),
+                          color: Color(0xFF1F2937), // CloudWalk dark
                           fontWeight: FontWeight.w500,
                         ),
                       ),
