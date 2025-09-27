@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/analytics_data.dart';
 import '../services/ai_data_agent.dart';
 import '../services/openai_ai_service.dart';
+import '../services/admin_service.dart';
 import 'churn_analytics_screen.dart';
 
 class AIAgentScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
   ReferralAnalytics? _analytics;
   bool _isLoading = false;
   bool _isLoadingAnalytics = true;
+  bool _isAdmin = false;
   
   late AnimationController _typingController;
   late Animation<double> _typingAnimation;
@@ -35,7 +37,14 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     _typingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _typingController, curve: Curves.easeInOut),
     );
-    
+
+    _initializeAgent();
+  }
+
+  Future<void> _initializeAgent() async {
+    // Check if user is admin
+    _isAdmin = await AdminService.hasAdminAccess();
+
     _loadAnalytics();
     _addWelcomeMessage();
   }
@@ -50,37 +59,85 @@ class _AIAgentScreenState extends State<AIAgentScreen>
 
   void _addWelcomeMessage() async {
     final isConfigured = await OpenAIService.isConfigured();
-    
-    final welcomeResponse = AIResponse(
-      query: "",
-      response: isConfigured 
-        ? "👋 Olá! Eu sou seu Agente de Dados de IA da CloudWalk, powered by GPT-4o-mini. Posso fornecer análises avançadas, insights em linguagem natural e recomendações inteligentes para seu programa de indicação. O que gostaria de saber?"
-        : "❌ Olá! Eu sou seu Agente de Dados de IA da CloudWalk. Para usar minha inteligência completa com GPT-4o-mini, configure sua chave da API OpenAI no arquivo .env do projeto.",
-      insights: isConfigured ? [
-        "Powered by OpenAI GPT-4 para compreensão avançada",
-        "Forneço insights contextuais de negócios",
-        "Entendo consultas em linguagem natural",
-        "Gero recomendações inteligentes para o mercado brasileiro",
+
+    String welcomeMessage;
+    List<String> insights;
+    List<String> suggestedQuestions;
+
+    if (_isAdmin) {
+      // Admin welcome message
+      welcomeMessage = isConfigured
+        ? "👋 Olá, Administrador! Eu sou seu Agente de Analytics Avançado da CloudWalk, powered by GPT-4o-mini. Tenho acesso completo aos dados do sistema e posso fornecer insights analíticos profundos, previsões de crescimento, análise de performance de indicações e recomendações estratégicas. Como posso ajudar a otimizar seu programa hoje?"
+        : "❌ Olá, Administrador! Para acessar análises avançadas completas com GPT-4o-mini, configure sua chave da API OpenAI no arquivo .env do projeto.";
+
+      insights = isConfigured ? [
+        "Acesso completo a dados analíticos do sistema",
+        "Análises de performance e ROI em tempo real",
+        "Previsões de crescimento e churn",
+        "Interface natural para consultas de negócio",
+        "Recomendações estratégicas para o mercado brasileiro",
       ] : [
         "Configure OPENAI_API_KEY no arquivo .env",
         "Reinicie a aplicação após configurar",
         "Acesse platform.openai.com para obter sua chave",
         "GPT-4 fornece análises muito mais avançadas",
-      ],
-      suggestedQuestions: isConfigured ? [
-        "Quais são as maiores oportunidades de crescimento no meu programa de indicação?",
-        "Como posso melhorar o engajamento e reduzir o churn?",
-        "Me dê uma análise completa do meu funil de conversão",
-        "Que estratégias específicas devo implementar este mês?",
+      ];
+
+      suggestedQuestions = isConfigured ? [
+        "Quais são as principais métricas de performance do programa?",
+        "Qual o ROI atual e projeções para os próximos meses?",
+        "Identifique usuários com alto risco de churn",
+        "Gere recomendações para aumentar a taxa de conversão",
+        "Analise a performance dos top performers",
+        "Forneça previsões de crescimento para o trimestre",
       ] : [
         "Como configurar a chave da API OpenAI?",
         "Onde encontro o arquivo .env?",
         "Como obter uma chave da API?",
         "Quais são os benefícios do GPT-4?",
-      ],
+      ];
+    } else {
+      // Regular user welcome message
+      welcomeMessage = isConfigured
+        ? "👋 Olá! Eu sou seu Assistente de Marketing da CloudWalk, powered by GPT-4o-mini. Posso tirar dúvidas sobre a CloudWalk e Infinity Pay, fornecer insights personalizados de marketing e ajudar a impulsionar sua conta baseado nos seus dados. O que gostaria de saber?"
+        : "❌ Olá! Eu sou seu Assistente de Marketing da CloudWalk. Para usar minha inteligência completa com GPT-4o-mini, configure sua chave da API OpenAI no arquivo .env do projeto.";
+
+      insights = isConfigured ? [
+        "Powered by OpenAI GPT-4 para compreensão avançada",
+        "Especialista em CloudWalk e Infinity Pay",
+        "Insights personalizados baseados nos seus dados",
+        "Dicas práticas para aumentar suas indicações",
+        "Análises do seu desempenho individual",
+      ] : [
+        "Configure OPENAI_API_KEY no arquivo .env",
+        "Reinicie a aplicação após configurar",
+        "Acesse platform.openai.com para obter sua chave",
+        "GPT-4 fornece respostas muito mais inteligentes",
+      ];
+
+      suggestedQuestions = isConfigured ? [
+        "O que é a CloudWalk e como funciona?",
+        "Como funciona o programa de indicações da Infinity Pay?",
+        "Como posso aumentar minhas indicações?",
+        "Quais são as melhores estratégias de marketing?",
+        "Analise meu desempenho atual",
+        "Dicas para engajar mais pessoas",
+      ] : [
+        "Como configurar a chave da API OpenAI?",
+        "Onde encontro o arquivo .env?",
+        "Como obter uma chave da API?",
+        "Quais são os benefícios do GPT-4?",
+      ];
+    }
+
+    final welcomeResponse = AIResponse(
+      query: "",
+      response: welcomeMessage,
+      insights: insights,
+      suggestedQuestions: suggestedQuestions,
       timestamp: DateTime.now(),
     );
-    
+
     setState(() {
       _chatHistory.add(welcomeResponse);
     });
@@ -159,12 +216,12 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     });
 
     try {
-      final response = await AIDataAgent.processQuery(query);
+      final response = await AIDataAgent.processQuery(query, isAdmin: _isAdmin);
       setState(() {
         _chatHistory.add(response);
         _isLoading = false;
       });
-      
+
       _queryController.clear();
       _scrollToBottom();
     } catch (e) {

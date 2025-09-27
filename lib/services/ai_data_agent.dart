@@ -48,9 +48,9 @@ class AIDataAgent {
   }
   
   /// Process natural language queries using OpenAI GPT-4
-  static Future<AIResponse> processQuery(String query) async {
+  static Future<AIResponse> processQuery(String query, {bool isAdmin = false}) async {
     // Direct OpenAI processing - no fallback
-    return await OpenAIService.processQuery(query);
+    return await OpenAIService.processQuery(query, isAdmin: isAdmin);
   }
   
   /// Generate marketing recommendations

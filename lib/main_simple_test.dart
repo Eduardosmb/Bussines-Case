@@ -8,6 +8,7 @@ import 'services/auth_service.dart';
 import 'services/mock_data_service.dart';
 import 'services/referral_link_service.dart';
 import 'models/referral_link.dart';
+import 'screens/ai_agent_screen.dart';
 
 void main() {
   runApp(const ReferralApp());
@@ -1166,38 +1167,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showAIAgentDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.smart_toy, color: Colors.black),
-              SizedBox(width: 8),
-              Text(
-                'AI Agent',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: const Text(
-            'AI Agent feature is coming soon! 🚀\n\nThis will help you optimize your referral strategy and get insights about your performance.',
-            style: TextStyle(fontSize: 16),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Got it!'),
-            ),
-          ],
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AIAgentScreen(),
+      ),
     );
   }
 
