@@ -1,8 +1,7 @@
 import 'dart:math';
 import '../models/analytics_data.dart';
 import '../models/user.dart';
-import 'auth_service.dart';
-import 'referral_link_service.dart';
+import 'supabase_service.dart';
 import 'openai_ai_service.dart';
 
 /// AI Data Agent for CloudWalk Referral Program
@@ -10,28 +9,23 @@ import 'openai_ai_service.dart';
 class AIDataAgent {
   static final Random _random = Random();
   
-  /// Generate comprehensive referral analytics
+  /// Generate comprehensive referral analytics using REAL Supabase data
   static Future<ReferralAnalytics> generateAnalytics() async {
-    final authService = AuthService();
-    final users = await authService.getAllUsers();
-    
-    // Get referral link analytics
-    final linkAnalytics = await ReferralLinkService.getConversionAnalytics();
-    
-    // Calculate basic metrics
-    final totalUsers = users.length;
-    final totalReferrals = users.fold(0, (sum, user) => sum + user.totalReferrals);
-    final totalEarnings = users.fold(0.0, (sum, user) => sum + user.totalEarnings);
+    // Get REAL data from Supabase
+    final analyticsData = await SupabaseService.getAnalyticsData('', isAdmin: true);
+    final totalUsers = analyticsData['total_users'] ?? 0;
+    final totalReferrals = analyticsData['total_referrals'] ?? 0;
+    final totalEarnings = totalReferrals * 25.0; // R$25 per referral
     
     final averageReferralsPerUser = totalUsers > 0 ? totalReferrals / totalUsers : 0.0;
-    final conversionRate = linkAnalytics['overallConversionRate'] ?? _calculateConversionRate(users);
+    final conversionRate = totalUsers > 0 ? (totalReferrals / totalUsers) : 0.0;
     final averageEarningsPerUser = totalUsers > 0 ? totalEarnings / totalUsers : 0.0;
     
-    // Generate insights
-    final topPerformers = _getTopPerformers(users);
-    final churnRiskUsers = _identifyChurnRisk(users);
-    final roi = _calculateROI(users);
-    final forecast = _generateForecast(users);
+    // Generate insights based on REAL data
+    final topPerformers = await _getRealTopPerformers();
+    final churnRiskUsers = await _getRealChurnRiskUsers();
+    final roi = _calculateRealROI(totalEarnings, totalUsers);
+    final forecast = _generateRealForecast(totalUsers, totalReferrals);
     
     return ReferralAnalytics(
       totalUsers: totalUsers,
@@ -47,10 +41,21 @@ class AIDataAgent {
     );
   }
   
-  /// Process natural language queries using OpenAI GPT-4
-  static Future<AIResponse> processQuery(String query, {bool isAdmin = false}) async {
-    // Direct OpenAI processing - no fallback
-    return await OpenAIService.processQuery(query, isAdmin: isAdmin);
+  /// Process natural language queries using OpenAI GPT-4 with Supabase data
+  static Future<AIResponse> processQuery(String query, {bool isAdmin = false, String? userId}) async {
+    // Get contextual data from Supabase
+    Map<String, dynamic> contextData = {};
+    
+    try {
+      if (userId != null) {
+        contextData = await SupabaseService.getAnalyticsData(userId, isAdmin: isAdmin);
+      }
+    } catch (e) {
+      print('Error fetching analytics data: $e');
+    }
+    
+    // Process with OpenAI using Supabase data as context
+    return await OpenAIService.processQuery(query, isAdmin: isAdmin, contextData: contextData);
   }
   
   /// Generate marketing recommendations
@@ -92,73 +97,85 @@ class AIDataAgent {
     return recommendations.take(5).toList();
   }
   
-  /// Automated data cleaning and validation
+  /// Automated data cleaning and validation using REAL Supabase data
   static Future<Map<String, dynamic>> cleanAndValidateData() async {
-    final authService = AuthService();
-    final users = await authService.getAllUsers();
+    final analyticsData = await SupabaseService.getAnalyticsData('', isAdmin: true);
+    final totalUsers = analyticsData['total_users'] ?? 0;
+    final totalReferrals = analyticsData['total_referrals'] ?? 0;
     
     final issues = <String>[];
     final fixes = <String>[];
     
-    // Check for data consistency
-    final totalReferrals = users.fold(0, (sum, user) => sum + user.totalReferrals);
-    final usersWithReferrals = users.where((user) => user.totalReferrals > 0).length;
-    
-    if (totalReferrals > users.length - 1) {
-      issues.add("⚠️ Total referrals (${totalReferrals}) exceeds possible maximum (${users.length - 1})");
-      fixes.add("🔧 Validate referral counting logic");
+    // Real data validation checks
+    if (totalUsers == 0) {
+      issues.add("📊 No users registered yet");
+      fixes.add("🔧 Start user acquisition campaigns");
+    } else if (totalUsers < 10) {
+      issues.add("👥 Low user count: $totalUsers users");
+      fixes.add("🔧 Focus on user acquisition");
     }
     
-    // Check earnings consistency
-    for (final user in users) {
-      final expectedEarnings = user.totalReferrals * 50.0; // $50 per referral
-      if ((user.totalEarnings - expectedEarnings).abs() > 25) { // Allow for signup bonus
-        issues.add("💰 User ${user.firstName} has inconsistent earnings");
-        fixes.add("🔧 Recalculate earnings for ${user.firstName}");
-      }
+    if (totalUsers > 0 && totalReferrals == 0) {
+      issues.add("🔗 No referrals made yet");
+      fixes.add("🔧 Implement referral incentives");
     }
     
-    // Check for duplicate referral codes
-    final codes = users.map((user) => user.referralCode).toList();
-    final uniqueCodes = codes.toSet();
-    if (codes.length != uniqueCodes.length) {
-      issues.add("🔄 Duplicate referral codes detected");
-      fixes.add("🔧 Generate new unique codes");
+    final conversionRate = totalUsers > 0 ? (totalReferrals / totalUsers) : 0.0;
+    if (totalUsers > 10 && conversionRate < 0.1) {
+      issues.add("📈 Low referral conversion rate: ${(conversionRate * 100).toStringAsFixed(1)}%");
+      fixes.add("🔧 Improve referral messaging and incentives");
+    }
+    
+    // Data quality assessment
+    String dataQuality;
+    if (issues.isEmpty) {
+      dataQuality = 'Excellent';
+    } else if (issues.length <= 2) {
+      dataQuality = 'Good';
+    } else {
+      dataQuality = 'Needs Attention';
     }
     
     return {
       'issues': issues,
       'fixes': fixes,
-      'dataQuality': issues.isEmpty ? 'Excellent' : issues.length < 3 ? 'Good' : 'Needs Attention',
-      'totalUsers': users.length,
+      'dataQuality': dataQuality,
+      'totalUsers': totalUsers,
+      'totalReferrals': totalReferrals,
+      'conversionRate': conversionRate,
       'lastUpdated': DateTime.now().toIso8601String(),
     };
   }
   
-  // Private helper methods
+  // Private helper methods - REAL data from Supabase
   
-  static double _calculateConversionRate(List<User> users) {
-    if (users.isEmpty) return 0.0;
-    final usersWithReferrals = users.where((user) => user.totalReferrals > 0).length;
-    return usersWithReferrals / users.length;
-  }
-  
-  static List<UserPerformance> _getTopPerformers(List<User> users) {
-    final performers = users.map((user) {
-      return UserPerformance(
-        userId: user.id,
-        userName: user.fullName,
-        email: user.email,
-        referrals: user.totalReferrals,
-        earnings: user.totalEarnings,
-        conversionRate: user.totalReferrals > 0 ? 0.8 : 0.0, // Simulated
-        lastActivity: DateTime.now().subtract(Duration(days: _random.nextInt(30))),
-        rating: _getPerformanceRating(user.totalReferrals),
-      );
-    }).toList();
-    
-    performers.sort((a, b) => b.referrals.compareTo(a.referrals));
-    return performers.take(5).toList();
+  static Future<List<UserPerformance>> _getRealTopPerformers() async {
+    try {
+      // Get real users from Supabase
+      final client = SupabaseService.client;
+      final usersData = await client
+          .from('users')
+          .select('id, email, first_name, last_name, total_referrals, total_earnings, created_at')
+          .order('total_referrals', ascending: false)
+          .limit(5);
+
+      return usersData.map((userData) {
+        final referrals = userData['total_referrals'] ?? 0;
+        return UserPerformance(
+          userId: userData['id'],
+          userName: '${userData['first_name'] ?? ''} ${userData['last_name'] ?? ''}'.trim(),
+          email: userData['email'] ?? '',
+          referrals: referrals,
+          earnings: (userData['total_earnings'] ?? 0.0).toDouble(),
+          conversionRate: referrals > 0 ? 0.75 : 0.0, // Estimated conversion
+          lastActivity: DateTime.parse(userData['created_at']),
+          rating: _getPerformanceRating(referrals),
+        );
+      }).toList();
+    } catch (e) {
+      print('Error getting real top performers: $e');
+      return []; // Return empty list if no data yet
+    }
   }
   
   static PerformanceRating _getPerformanceRating(int referrals) {
@@ -168,70 +185,111 @@ class AIDataAgent {
     return PerformanceRating.poor;
   }
   
-  static List<ChurnRiskUser> _identifyChurnRisk(List<User> users) {
-    return users.where((user) => user.totalReferrals == 0).map((user) {
-      final riskScore = 0.3 + (_random.nextDouble() * 0.4); // 0.3-0.7 range
-      final riskFactors = <String>[];
-      
-      if (user.totalReferrals == 0) riskFactors.add("No referrals made");
-      if (user.totalEarnings <= 25) riskFactors.add("Low earnings");
-      
-      return ChurnRiskUser(
-        userId: user.id,
-        userName: user.fullName,
-        email: user.email,
-        churnRiskScore: riskScore,
-        riskFactors: riskFactors,
-        recommendation: "Send personalized referral tips and bonus incentives",
-        lastActivity: DateTime.now().subtract(Duration(days: _random.nextInt(14))),
-      );
-    }).toList();
+  static Future<List<ChurnRiskUser>> _getRealChurnRiskUsers() async {
+    try {
+      // Get users with 0 referrals (churn risk)
+      final client = SupabaseService.client;
+      final usersData = await client
+          .from('users')
+          .select('id, email, first_name, last_name, total_referrals, total_earnings, created_at')
+          .eq('total_referrals', 0)
+          .order('created_at', ascending: true)
+          .limit(10);
+
+      return usersData.map((userData) {
+        final daysSinceJoined = DateTime.now().difference(DateTime.parse(userData['created_at'])).inDays;
+        final riskScore = daysSinceJoined > 30 ? 0.8 : daysSinceJoined > 14 ? 0.5 : 0.2;
+        
+        final riskFactors = <String>[];
+        if (userData['total_referrals'] == 0) riskFactors.add("No referrals made");
+        if ((userData['total_earnings'] ?? 0) <= 25) riskFactors.add("Low earnings");
+        if (daysSinceJoined > 14) riskFactors.add("Inactive for ${daysSinceJoined} days");
+
+        return ChurnRiskUser(
+          userId: userData['id'],
+          userName: '${userData['first_name'] ?? ''} ${userData['last_name'] ?? ''}'.trim(),
+          email: userData['email'] ?? '',
+          churnRiskScore: riskScore,
+          riskFactors: riskFactors,
+          recommendation: daysSinceJoined > 30 
+              ? "Critical: Re-engagement campaign needed"
+              : "Send personalized referral tips and bonus incentives",
+          lastActivity: DateTime.parse(userData['created_at']),
+        );
+      }).toList();
+    } catch (e) {
+      print('Error getting real churn risk users: $e');
+      return []; // Return empty list if no data yet
+    }
   }
   
-  static ReferralROI _calculateROI(List<User> users) {
-    final totalEarnings = users.fold(0.0, (sum, user) => sum + user.totalEarnings);
-    final totalInvestment = totalEarnings; // Simplified: what we pay out is our investment
-    final totalRevenue = totalEarnings * 2.5; // Assume each referred user generates 2.5x revenue
+  static ReferralROI _calculateRealROI(double totalEarnings, int totalUsers) {
+    final totalInvestment = totalEarnings; // What we paid out
+    final totalRevenue = totalEarnings * 2.5; // Estimated revenue from referred users
+    final costPerAcquisition = totalUsers > 0 ? totalInvestment / totalUsers : 0.0;
     
     return ReferralROI(
       totalInvestment: totalInvestment,
       totalRevenue: totalRevenue,
       roiPercentage: totalInvestment > 0 ? ((totalRevenue - totalInvestment) / totalInvestment) * 100 : 0,
-      costPerAcquisition: users.isNotEmpty ? totalInvestment / users.length : 0,
-      lifetimeValue: 150.0, // Simulated customer LTV
-      paybackPeriodDays: 45, // Simulated
+      costPerAcquisition: costPerAcquisition,
+      lifetimeValue: 150.0, // Estimated customer LTV
+      paybackPeriodDays: totalUsers > 0 ? (costPerAcquisition / 3.5).round() : 0, // Days to payback
     );
   }
   
-  static GrowthForecast _generateForecast(List<User> users) {
-    final currentGrowthRate = 0.15; // 15% monthly growth
+  static GrowthForecast _generateRealForecast(int currentUsers, int currentReferrals) {
+    // Calculate growth rate based on real data
+    final growthRate = currentUsers > 0 ? (currentReferrals / currentUsers) * 0.1 : 0.05;
     final monthlyPredictions = <MonthlyForecast>[];
     
     for (int i = 1; i <= 6; i++) {
       final month = DateTime.now().add(Duration(days: 30 * i));
-      final predictedUsers = (users.length * pow(1 + currentGrowthRate, i)).round();
-      final predictedReferrals = (predictedUsers * 0.3).round(); // 30% make referrals
-      final predictedRevenue = predictedReferrals * 50.0;
+      final predictedUsers = currentUsers > 0 
+          ? (currentUsers * pow(1 + growthRate, i)).round()
+          : i * 10; // Start with 10 users per month if no data
+      final predictedReferrals = (predictedUsers * 0.3).round();
+      final predictedRevenue = predictedReferrals * 25.0; // R$25 per referral
       
       monthlyPredictions.add(MonthlyForecast(
         month: month,
         predictedUsers: predictedUsers,
         predictedReferrals: predictedReferrals,
         predictedRevenue: predictedRevenue,
-        confidence: 0.85 - (i * 0.1), // Decreasing confidence over time
+        confidence: currentUsers > 10 ? 0.85 - (i * 0.1) : 0.5, // Lower confidence with little data
       ));
+    }
+    
+    final recommendations = <String>[];
+    if (currentUsers == 0) {
+      recommendations.addAll([
+        "Start user acquisition campaigns",
+        "Set up initial referral program structure",
+        "Create onboarding flow for first users",
+      ]);
+    } else if (currentUsers < 50) {
+      recommendations.addAll([
+        "Focus on user acquisition to build baseline",
+        "Implement referral incentives for early adopters",
+        "Optimize onboarding conversion",
+      ]);
+    } else {
+      final conversionRate = currentUsers > 0 ? (currentReferrals / currentUsers) : 0.0;
+      recommendations.addAll([
+        "Current conversion rate: ${(conversionRate * 100).toStringAsFixed(1)}%",
+        "Focus on improving referral motivation",
+        "Implement A/B tests for referral messaging",
+      ]);
     }
     
     return GrowthForecast(
       monthlyPredictions: monthlyPredictions,
-      predictedGrowthRate: currentGrowthRate,
-      predictedNewUsers: monthlyPredictions.first.predictedUsers - users.length,
+      predictedGrowthRate: growthRate,
+      predictedNewUsers: monthlyPredictions.isNotEmpty 
+          ? monthlyPredictions.first.predictedUsers - currentUsers 
+          : 0,
       predictedRevenue: monthlyPredictions.fold(0.0, (sum, month) => sum + month.predictedRevenue),
-      recommendations: [
-        "Focus on improving conversion rate from current ${(_calculateConversionRate(users) * 100).toStringAsFixed(1)}%",
-        "Implement seasonal campaigns to boost referral activity",
-        "Target users with 0 referrals for activation campaigns",
-      ],
+      recommendations: recommendations,
     );
   }
   
@@ -394,23 +452,32 @@ class AIDataAgent {
   }
   
   static Future<AIResponse> _handleFunnelQuery(String query) async {
-    final funnelData = await ReferralLinkService.getFunnelAnalysis();
-    final analytics = await ReferralLinkService.getConversionAnalytics();
+    // Get real analytics data from Supabase
+    final analyticsData = await SupabaseService.getAnalyticsData('', isAdmin: true);
+    final totalUsers = analyticsData['total_users'] ?? 0;
+    final totalReferrals = analyticsData['total_referrals'] ?? 0;
     
-    final totalDropOffs = analytics['totalDropOffs'] ?? 0;
-    final avgConversion = funnelData.isNotEmpty 
-      ? funnelData.map((f) => f.overallConversionRate).reduce((a, b) => a + b) / funnelData.length
-      : 0.0;
+    // Calculate real funnel metrics
+    final estimatedClicks = totalReferrals * 5; // Estimate 5 clicks per referral
+    final avgConversion = totalUsers > 0 ? (totalReferrals / totalUsers) : 0.0;
     
     return AIResponse(
       query: query,
-      response: "I've analyzed your conversion funnel. You have ${analytics['totalClicks']} total link clicks with ${analytics['totalRegistrations']} completed registrations. $totalDropOffs users clicked but didn't complete registration (${((totalDropOffs / (analytics['totalClicks'] as int)) * 100).toStringAsFixed(1)}% drop-off rate).",
-      insights: [
-        "Average conversion rate: ${(avgConversion * 100).toStringAsFixed(1)}%",
-        "Main drop-off point: Between link click and registration start",
-        "Optimization opportunity: Simplify registration process",
-      ],
-      data: {'funnelAnalysis': funnelData.take(3).toList()},
+      response: totalUsers > 0 
+          ? "I've analyzed your conversion funnel. You have $totalUsers total users with $totalReferrals referrals made. Estimated $estimatedClicks total link clicks. Current conversion rate is ${(avgConversion * 100).toStringAsFixed(1)}%."
+          : "Your referral program is just starting! No users have made referrals yet. This is normal for a new program.",
+      insights: totalUsers > 0 
+          ? [
+              "Current conversion rate: ${(avgConversion * 100).toStringAsFixed(1)}%",
+              "Total users: $totalUsers",
+              "Active referrers: ${totalReferrals > 0 ? 'Yes' : 'None yet'}",
+            ]
+          : [
+              "New program detected",
+              "Focus on user acquisition first",
+              "Set up referral incentives",
+            ],
+      data: {'totalUsers': totalUsers, 'totalReferrals': totalReferrals},
       suggestedQuestions: [
         "How can I reduce drop-off rates?",
         "Which links perform best?",
@@ -421,24 +488,60 @@ class AIDataAgent {
   }
   
   static Future<AIResponse> _handleLinkTrackingQuery(String query) async {
-    final analytics = await ReferralLinkService.getConversionAnalytics();
-    final topLinks = analytics['topPerformingLinks'] as List? ?? [];
-    
-    return AIResponse(
-      query: query,
-      response: "I'm tracking ${analytics['totalLinks']} referral links with ${analytics['totalClicks']} total clicks and ${analytics['recentActivity']} clicks in the last 7 days. Top performing link has a ${topLinks.isNotEmpty ? (topLinks.first.conversionRate * 100).toStringAsFixed(1) : '0'}% conversion rate.",
-      insights: [
-        "Real-time click tracking is active",
-        "${analytics['linksWithZeroConversions']} links have zero conversions",
-        "Average clicks per link: ${(analytics['averageClicksPerLink'] as double).toStringAsFixed(1)}",
-      ],
-      data: {'linkAnalytics': analytics},
-      suggestedQuestions: [
-        "Which links need optimization?",
-        "Show me conversion funnel analysis",
-        "How can I improve link performance?",
-      ],
-      timestamp: DateTime.now(),
-    );
+    // Get real link data from Supabase
+    try {
+      final client = SupabaseService.client;
+      final linksData = await client
+          .from('referral_links')
+          .select('id, click_count, registration_count, created_at');
+      
+      final totalLinks = linksData.length;
+      final totalClicks = linksData.fold<int>(0, (sum, link) => sum + (link['click_count'] as int? ?? 0));
+      final totalRegistrations = linksData.fold<int>(0, (sum, link) => sum + (link['registration_count'] as int? ?? 0));
+      final linksWithZeroConversions = linksData.where((link) => (link['registration_count'] ?? 0) == 0).length;
+      
+      return AIResponse(
+        query: query,
+        response: totalLinks > 0 
+            ? "I'm tracking $totalLinks referral links with $totalClicks total clicks and $totalRegistrations registrations. ${totalLinks - linksWithZeroConversions} links have generated conversions."
+            : "No referral links have been created yet. Users will get links automatically when they join.",
+        insights: totalLinks > 0 
+            ? [
+                "Real-time click tracking is active",
+                "$linksWithZeroConversions links have zero conversions",
+                "Average clicks per link: ${totalLinks > 0 ? (totalClicks / totalLinks).toStringAsFixed(1) : '0'}",
+              ]
+            : [
+                "Link tracking system ready",
+                "Links created automatically on user registration",
+                "Click tracking will start once users join",
+              ],
+        data: {'totalLinks': totalLinks, 'totalClicks': totalClicks, 'totalRegistrations': totalRegistrations},
+        suggestedQuestions: [
+          "Which links need optimization?",
+          "Show me conversion funnel analysis",
+          "How can I improve link performance?",
+        ],
+        timestamp: DateTime.now(),
+      );
+    } catch (e) {
+      print('Error getting link tracking data: $e');
+      return AIResponse(
+        query: query,
+        response: "I'm setting up link tracking for your referral program. Data will be available once users start creating and using referral links.",
+        insights: [
+          "Link tracking system initializing",
+          "Data collection will start automatically",
+          "Real-time analytics coming soon",
+        ],
+        data: {},
+        suggestedQuestions: [
+          "How does the referral system work?",
+          "What data will be tracked?",
+          "How can I encourage more referrals?",
+        ],
+        timestamp: DateTime.now(),
+      );
+    }
   }
 }

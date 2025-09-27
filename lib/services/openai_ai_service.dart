@@ -41,18 +41,18 @@ class OpenAIService {
   }
   
   /// Process natural language queries using OpenAI GPT-4
-  static Future<AIResponse> processQuery(String userQuery, {bool isAdmin = false}) async {
+  static Future<AIResponse> processQuery(String userQuery, {bool isAdmin = false, Map<String, dynamic>? contextData}) async {
     try {
       // Ensure OpenAI is initialized
       if (!_initialized) {
         await initialize();
       }
       
-      // Gather business context
-      final contextData = await _gatherContextData();
+      // Use provided context data or gather it
+      final finalContextData = contextData ?? await _gatherContextData();
 
       // Create comprehensive system prompt
-      final systemPrompt = _buildSystemPrompt(contextData, isAdmin: isAdmin);
+      final systemPrompt = _buildSystemPrompt(finalContextData, isAdmin: isAdmin);
       
       // Call OpenAI GPT-4o-mini (most cost-effective and accessible)
       final chatCompletion = await OpenAI.instance.chat.create(
@@ -85,7 +85,7 @@ class OpenAIService {
         query: userQuery,
         response: parsedResponse['response'],
         insights: List<String>.from(parsedResponse['insights'] ?? []),
-        data: contextData,
+        data: finalContextData,
         suggestedQuestions: List<String>.from(parsedResponse['suggestedQuestions'] ?? []),
         timestamp: DateTime.now(),
       );
@@ -214,12 +214,28 @@ DADOS ANALÍTICOS COMPLETOS:
 ${jsonEncode(context)}
 
 SEU PAPEL COMO ADMIN:
-- Automate data collection and cleaning dos dados do programa
+- Automate data collection and cleaning dos dados do programa de indicações CloudWalk
 - Fornecer referral performance insights (conversion rates, churn risk, referral ROI)
-- Generate forecasts and recommendations for marketing and growth strategies
-- Natural language interface for business users to query growth data
-- Análise profunda de métricas de negócio e KPIs
-- Identificação de tendências e oportunidades estratégicas
+- Generate forecasts and recommendations for marketing and growth strategies do programa
+- Natural language interface for business users to query growth data do CloudWalk
+- Análise profunda de métricas de negócio e KPIs do programa de indicações
+- Identificação de tendências e oportunidades estratégicas no programa CloudWalk
+
+REGRAS DE ESCOPO ESTRITAS PARA ADMIN:
+🚫 NÃO RESPONDER sobre qualquer assunto que não seja:
+- Análise de dados do programa de indicações CloudWalk
+- Performance e métricas do Infinity Pay referral program
+- Estratégias de crescimento e marketing para o programa
+- Otimização de conversão e retenção de usuários
+- ROI e análises financeiras do programa de indicações
+- Previsões e recomendações para o negócio CloudWalk
+
+🚫 RECUSAR POLITICAMENTE perguntas sobre:
+- Política, religião, esportes, entretenimento
+- Outras empresas ou produtos não relacionados ao CloudWalk
+- Tecnologias gerais não relacionadas ao programa
+- Assuntos pessoais ou não relacionados ao negócio
+- Qualquer tópico fora do escopo de análise de negócio CloudWalk
 
 CAPACIDADES AVANÇADAS PARA ADMINS:
 1. **Análise de Performance**: Métricas detalhadas, benchmarking, identificação de gaps
@@ -236,8 +252,9 @@ DIRETRIZES PARA ADMINS:
 - Seja proativo em identificar oportunidades não-obvias
 - Forneça métricas de acompanhamento para cada recomendação
 - Considere escalabilidade e sustentabilidade das estratégias
+- Se a pergunta for fora do escopo, redirecione para tópicos relacionados ao CloudWalk
 
-Responda à consulta do administrador com análises profundas e recomendações acionáveis baseadas nos dados completos do sistema.
+Responda à consulta do administrador com análises profundas e recomendações acionáveis baseadas nos dados completos do sistema CloudWalk. Se a pergunta não for relacionada ao programa de indicações ou negócio CloudWalk, explique que você é especializado apenas em análises do programa de indicações.
 ''';
     } else {
       // Regular user prompt - Marketing assistance and personal insights
@@ -254,12 +271,28 @@ DADOS GERAIS DO PROGRAMA:
 ${jsonEncode(context)}
 
 SEU PAPEL COMO ASSISTENTE:
-- Tirar dúvidas sobre CloudWalk, Infinity Pay e o programa de indicações
+- Tirar dúvidas EXCLUSIVAMENTE sobre CloudWalk, Infinity Pay e o programa de indicações
 - Fornecer insights de marketing personalizados baseados no perfil do usuário
 - Ajudar usuários a aumentarem suas indicações e ganhos
-- Dar dicas práticas de marketing e engajamento
-- Analisar desempenho individual e sugerir melhorias
-- Educar sobre estratégias de crescimento no mercado brasileiro
+- Dar dicas práticas de marketing e engajamento relacionadas ao programa
+- Analisar desempenho individual e sugerir melhorias no programa
+- Educar sobre estratégias de crescimento no mercado brasileiro para indicações
+
+REGRAS DE ESCOPO ESTRITAS:
+🚫 NÃO RESPONDER sobre qualquer assunto que não seja:
+- CloudWalk (empresa fintech brasileira)
+- Infinity Pay (produto/plataforma)
+- Programa de indicações/referrals da CloudWalk
+- Desempenho pessoal no programa (indicações, ganhos, códigos)
+- Dicas de marketing específicas para indicações
+- Funcionalidades da conta no programa
+
+🚫 RECUSAR POLITICAMENTE perguntas sobre:
+- Política, religião, esportes, entretenimento
+- Outras empresas fintech ou concorrentes
+- Tecnologias não relacionadas ao CloudWalk
+- Assuntos pessoais não relacionados ao programa
+- Qualquer tópico fora do escopo definido acima
 
 CAPACIDADES PARA USUÁRIOS:
 1. **Educação sobre a Empresa**: Explicar CloudWalk, Infinity Pay, benefícios do programa
@@ -276,8 +309,9 @@ DIRETRIZES PARA USUÁRIOS:
 - Foque em ações práticas e imediatas que gerem resultados
 - Incentive participação ativa e compartilhamento
 - Sempre mantenha tom positivo e construtivo
+- Se a pergunta for fora do escopo, redirecione educadamente para tópicos relacionados ao CloudWalk
 
-Responda à pergunta do usuário de forma personalizada, educativa e motivacional, baseando-se tanto no contexto geral quanto em dados específicos quando disponíveis.
+Responda à pergunta do usuário de forma personalizada, educativa e motivacional, baseando-se tanto no contexto geral quanto em dados específicos quando disponíveis. Se a pergunta não for relacionada ao CloudWalk ou ao programa de indicações, explique educadamente que você só pode ajudar com assuntos relacionados à empresa e ao programa.
 ''';
     }
   }

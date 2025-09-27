@@ -1,16 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'models/user.dart';
 import 'models/achievement.dart';
 import 'services/achievement_service.dart';
-import 'services/auth_service.dart';
-import 'services/mock_data_service.dart';
-import 'services/referral_link_service.dart';
+import 'services/supabase_service.dart';
 import 'models/referral_link.dart';
 import 'screens/ai_agent_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables first
+  try {
+    await dotenv.load(fileName: ".env");
+    print('✅ Environment variables loaded');
+    
+    // Debug: Print actual values being loaded
+    final url = dotenv.env['SUPABASE_URL'];
+    final key = dotenv.env['SUPABASE_ANON_KEY'];
+    print('🔍 LOADED - URL: ${url?.substring(0, 20)}... (length: ${url?.length})');
+    print('🔍 LOADED - Key: ${key?.substring(0, 20)}... (length: ${key?.length})');
+  } catch (e) {
+    print('❌ Error loading .env file: $e');
+    print('📋 Make sure you have a .env file with SUPABASE_URL and SUPABASE_ANON_KEY');
+  }
+  
+  // Initialize Supabase
+  try {
+    await SupabaseService.initialize();
+    print('✅ Supabase initialized successfully');
+  } catch (e) {
+    print('❌ Error initializing Supabase: $e');
+  }
+  
   runApp(const ReferralApp());
 }
 
@@ -39,23 +63,36 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final AuthService _authService = AuthService();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _referralCodeController = TextEditingController();
   bool _isLogin = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _checkCurrentUser();
   }
 
-  Future<void> _initializeApp() async {
-    // Create test user for referral testing
-    await _authService.createTestUser();
+  Future<void> _checkCurrentUser() async {
+    // Check if user is already logged in
+    try {
+      final currentUser = await SupabaseService.getCurrentUser();
+      if (currentUser != null && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardScreen(user: currentUser),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error checking current user: $e');
+    }
   }
 
   @override
@@ -105,9 +142,17 @@ class _AuthScreenState extends State<AuthScreen> {
                 const SizedBox(height: 32),
                 if (!_isLogin) ...[
                   TextFormField(
-                    controller: _nameController,
+                    controller: _firstNameController,
                     decoration: const InputDecoration(
-                      labelText: 'Full Name',
+                      labelText: 'First Name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _lastNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Last Name',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -195,42 +240,31 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      late AuthResult result;
+      User? user;
       if (_isLogin) {
-        result = await _authService.login(
-          email: _emailController.text,
+        user = await SupabaseService.loginUser(
+          email: _emailController.text.trim(),
           password: _passwordController.text,
         );
       } else {
-        final nameParts = _nameController.text.split(' ');
-        final firstName = nameParts.isNotEmpty ? nameParts.first : '';
-        final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
         
-        result = await _authService.register(
-          email: _emailController.text,
+        user = await SupabaseService.registerUser(
+          email: _emailController.text.trim(),
           password: _passwordController.text,
-          firstName: firstName,
-          lastName: lastName,
-          referralCode: _referralCodeController.text.isNotEmpty ? _referralCodeController.text : null,
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
+          referralCode: _referralCodeController.text.trim().isNotEmpty 
+              ? _referralCodeController.text.trim() 
+              : null,
         );
       }
 
-      if (result.success && result.user != null && mounted) {
-        Navigator.of(context).pushReplacement(
+      if (user != null && mounted) {
+        Navigator.pushReplacement(
+          context,
           MaterialPageRoute(
-            builder: (context) => DashboardScreen(
-              user: result.user!,
-              onLogout: () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const AuthScreen()),
-                );
-              },
-            ),
+            builder: (context) => DashboardScreen(user: user!),
           ),
-        );
-      } else if (!result.success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.error ?? 'Authentication failed')),
         );
       }
     } catch (e) {
@@ -251,12 +285,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
 class DashboardScreen extends StatefulWidget {
   final User user;
-  final VoidCallback onLogout;
+  final VoidCallback? onLogout;
 
   const DashboardScreen({
     super.key,
     required this.user,
-    required this.onLogout,
+    this.onLogout,
   });
 
   @override
@@ -278,18 +312,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadData() async {
     try {
-      final achievements = await _achievementService.getUserAchievements(widget.user.id);
+      final achievements = await SupabaseService.getUserAchievements(widget.user.id);
       
-      // Get or create referral link
-      final allLinks = await ReferralLinkService.getAllReferralLinks();
-      var existingLinks = allLinks.where((l) => l.userId == widget.user.email).toList();
-      if (existingLinks.isEmpty) {
-        existingLinks = allLinks.where((l) => l.userId == widget.user.id).toList();
-      }
+      // Get or create referral link from Supabase
+      final existingLinks = await SupabaseService.getUserReferralLinks(widget.user.id);
       
-      ReferralLink referralLink;
+      ReferralLink? referralLink;
       if (existingLinks.isEmpty) {
-        referralLink = await ReferralLinkService.generateReferralLink(widget.user);
+        // Create a default referral link
+        referralLink = await SupabaseService.createReferralLink(
+          widget.user.id, 
+          'Convite CloudWalk 🚀'
+        );
       } else {
         referralLink = existingLinks.first;
       }
@@ -348,7 +382,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           PopupMenuButton(
             onSelected: (value) async {
               if (value == 'logout') {
-                widget.onLogout();
+                if (widget.onLogout != null) {
+                  widget.onLogout!();
+                } else {
+                  _handleLogout();
+                }
               }
             },
             itemBuilder: (context) => [
@@ -1181,63 +1219,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.emoji_events, color: Colors.black),
-              SizedBox(width: 8),
-              Text(
+              const Icon(Icons.emoji_events, color: Colors.black, size: 28),
+              const SizedBox(width: 12),
+              const Text(
                 'Your Achievements',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const Spacer(),
+              Text(
+                '${_achievements.where((a) => a.isUnlocked).length}/${_achievements.length}',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
           content: SizedBox(
             width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
+            height: MediaQuery.of(context).size.height * 0.5,
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 0.85,
+              ),
               itemCount: _achievements.length,
               itemBuilder: (context, index) {
                 final achievement = _achievements[index];
-                return ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: achievement.isUnlocked ? Colors.black : Colors.grey[300],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: achievement.isUnlocked
-                          ? Text(
-                              achievement.icon,
-                              style: const TextStyle(fontSize: 20),
-                            )
-                          : ColorFiltered(
-                              colorFilter: const ColorFilter.matrix([
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0, 0, 0, 1, 0,
-                              ]),
-                              child: Text(
-                                achievement.icon,
-                                style: const TextStyle(fontSize: 20),
-                              ),
-                            ),
-                    ),
-                  ),
-                  title: Text(
-                    achievement.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: achievement.isUnlocked ? Colors.black : Colors.grey[600],
-                    ),
-                  ),
-                  subtitle: Text(achievement.description),
-                  trailing: achievement.isUnlocked
-                      ? const Icon(Icons.check_circle, color: Colors.green)
-                      : Icon(Icons.lock, color: Colors.grey[400]),
-                );
+                return _buildAchievementCardForDialog(achievement);
               },
             ),
           ),
@@ -1254,6 +1268,122 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildAchievementCardForDialog(Achievement achievement) {
+    final progress = _achievementService.getAchievementProgress(achievement, widget.user);
+    
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: achievement.isUnlocked ? Colors.black : Colors.grey[300],
+                    shape: BoxShape.circle,
+                    boxShadow: achievement.isUnlocked
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: achievement.isUnlocked
+                        ? Text(
+                            achievement.icon,
+                            style: const TextStyle(fontSize: 20),
+                          )
+                        : ColorFiltered(
+                            colorFilter: const ColorFilter.matrix([
+                              0.2126, 0.7152, 0.0722, 0, 0,
+                              0.2126, 0.7152, 0.0722, 0, 0,
+                              0.2126, 0.7152, 0.0722, 0, 0,
+                              0, 0, 0, 1, 0,
+                            ]),
+                            child: Text(
+                              achievement.icon,
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    achievement.title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: achievement.isUnlocked ? Colors.black : Colors.grey[600],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (achievement.isUnlocked)
+                  const Icon(Icons.check_circle, color: Colors.black, size: 16),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              achievement.description,
+              style: TextStyle(
+                fontSize: 12,
+                color: achievement.isUnlocked ? Colors.black87 : Colors.grey[500],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            if (!achievement.isUnlocked) ...[
+              Text(
+                'Progress: ${(progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.grey[300],
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+                minHeight: 3,
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'COMPLETED',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1353,5 +1483,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       },
     );
+  }
+
+  void _handleLogout() async {
+    await SupabaseService.logout();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const AuthScreen()),
+        (route) => false,
+      );
+    }
   }
 }

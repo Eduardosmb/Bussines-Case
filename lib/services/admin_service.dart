@@ -1,70 +1,25 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/referral_link.dart';
+import '../models/user.dart';
 
 class AdminService {
   static const String _adminsKey = 'admin_users';
   static const String _currentAdminKey = 'current_admin';
   
-  // Default admin credentials (in production, this would be more secure)
-  static const String defaultAdminEmail = 'admin@cloudwalk.com';
-  static const String defaultAdminPassword = 'cloudwalk123';
+  // Admin users by email (in production, this would be more secure)
+  static const List<String> adminEmails = ['test@cloudwalk.com'];
   
-  // Initialize default admin user
+  // Initialize default admin user (deprecated - now admin is based on user email)
   static Future<void> initializeDefaultAdmin() async {
-    final admins = await _getAllAdmins();
-    
-    // Check if default admin already exists
-    final adminExists = admins.any((admin) => admin.email == defaultAdminEmail);
-    
-    if (!adminExists) {
-      final defaultAdmin = AdminUser(
-        id: 'admin_001',
-        email: defaultAdminEmail,
-        name: 'CloudWalk Administrator',
-        role: AdminRole.superAdmin,
-        permissions: [
-          'view_analytics',
-          'manage_users',
-          'export_data',
-          'system_settings',
-          'ai_agent_access',
-        ],
-        createdAt: DateTime.now(),
-        lastLogin: DateTime.now(),
-      );
-      
-      await _saveAdmin(defaultAdmin, defaultAdminPassword);
-    }
+    // No longer needed since admin is determined by user email
+    // This function is kept for backward compatibility
   }
   
-  // Admin login
+  // Admin login (deprecated - now admin is based on user email)
   static Future<AdminUser?> adminLogin(String email, String password) async {
-    // Simple authentication (in production, use proper hashing)
-    if (email == defaultAdminEmail && password == defaultAdminPassword) {
-      final admins = await _getAllAdmins();
-      final admin = admins.firstWhere(
-        (a) => a.email == email,
-        orElse: () => throw Exception('Admin not found'),
-      );
-      
-      // Update last login
-      final updatedAdmin = AdminUser(
-        id: admin.id,
-        email: admin.email,
-        name: admin.name,
-        role: admin.role,
-        permissions: admin.permissions,
-        createdAt: admin.createdAt,
-        lastLogin: DateTime.now(),
-      );
-      
-      await _updateAdmin(updatedAdmin);
-      await _setCurrentAdmin(updatedAdmin);
-      
-      return updatedAdmin;
-    }
-    
+    // This function is deprecated since admin is now determined by user email
+    // Kept for backward compatibility
     return null;
   }
   
@@ -82,16 +37,28 @@ class AdminService {
     }
   }
   
-  // Check if user has admin access
+  // Check if user has admin access based on email
   static Future<bool> hasAdminAccess() async {
-    final admin = await getCurrentAdmin();
-    return admin != null;
+    // Import AuthService to check current user email
+    final prefs = await SharedPreferences.getInstance();
+    final currentUserJson = prefs.getString('current_user');
+
+    if (currentUserJson != null) {
+      try {
+        final userData = jsonDecode(currentUserJson);
+        final userEmail = userData['email'] as String?;
+        return adminEmails.contains(userEmail);
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
   }
   
   // Check specific permission
   static Future<bool> hasPermission(String permission) async {
-    final admin = await getCurrentAdmin();
-    return admin?.hasPermission(permission) ?? false;
+    // For now, if user is admin, they have all permissions
+    return await hasAdminAccess();
   }
   
   // Admin logout

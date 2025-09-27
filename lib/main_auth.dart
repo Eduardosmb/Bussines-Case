@@ -9,11 +9,11 @@ import 'services/achievement_service.dart';
 import 'services/mock_data_service.dart';
 import 'services/admin_service.dart';
 import 'services/referral_link_service.dart';
-// import 'screens/ai_agent_screen.dart';
-// import 'services/database_service.dart';
-// import 'services/database_auth_service.dart';
-// import 'services/database_referral_service.dart';
-// import 'screens/database_setup_screen.dart';
+import 'screens/ai_agent_screen.dart';
+import 'services/database_service.dart';
+import 'services/database_auth_service.dart';
+import 'services/database_referral_service.dart';
+import 'screens/database_setup_screen.dart';
 
 void main() {
   runApp(const ReferralApp());
@@ -1001,6 +1001,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF6C5CE7),
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.smart_toy),
+            onPressed: () => _showAIAgentDialog(),
+            tooltip: 'AI Agent',
+          ),
           PopupMenuButton(
             onSelected: (value) async {
               if (value == 'logout') {
@@ -2152,6 +2157,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  void _showAIAgentDialog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AIAgentScreen(),
       ),
     );
   }
