@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'package:dart_openai/dart_openai.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/analytics_data.dart';
-import 'auth_service.dart';
-import 'referral_link_service.dart';
-import 'achievement_service.dart';
-import 'config_service.dart';
+import 'supabase_service.dart';
 
 class OpenAIService {
   static void initialize(String apiKey) {
@@ -15,18 +13,21 @@ class OpenAIService {
   /// Process natural language queries using OpenAI GPT-4
   static Future<AIResponse> processQuery(String userQuery) async {
     try {
-      // Initialize OpenAI with saved API key
-      final apiKey = await ConfigService.getOpenAIApiKey();
-      if (apiKey != null) {
-        initialize(apiKey);
-      } else {
-        throw Exception('No API key configured');
+      // Load API key from .env file
+      await dotenv.load(fileName: '.env');
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('OPENAI_API_KEY not found in .env file');
       }
       
-      // First, gather all the data that the AI might need
-      final contextData = await _gatherContextData();
+      initialize(apiKey);
+      
+      // First, gather all the data that the AI might need, including current user data
+      final contextData = await _gatherContextDataWithUser();
       
       // Create a comprehensive system prompt with CloudWalk context
+      print('🔍 DEBUG - Final Context Data: $contextData');
       final systemPrompt = '''
 You are CloudWalk's AI Assistant. Your role is to help users understand their referral performance, achievements, and general platform features.
 
@@ -74,18 +75,25 @@ CloudWalk is a Brazilian fintech founded in 2017, leader in digital payments and
 - Achievements and rewards
 - Top performers leaderboard
 
-CURRENT CONTEXT DATA:
-${jsonEncode(contextData)}
+CURRENT USER DATA (You ALREADY HAVE this information - don't ask for it):
+${_buildUserSpecificContext(contextData)}
+
+OVERALL PLATFORM DATA:
+${_buildPlatformContext(contextData)}
 
 GUIDELINES:
-- Be friendly and encouraging.
-- Explain concepts clearly about CloudWalk's ecosystem.
-- Provide insights based on user's data (if available in context).
-- Use emojis to make responses engaging.
-- Focus on CloudWalk, Infinity Pay, blockchain Stratus, and referral program.
-- If asked about unrelated topics, politely redirect to CloudWalk/Infinity Pay.
-- Always respond in English.
+- Always respond in English
+- Be friendly and encouraging
+- You ALREADY HAVE all the user's data above - never ask for it
+- Provide specific insights based on the user's actual performance data
+- Use emojis to make responses engaging
+- Focus on CloudWalk, Infinity Pay, blockchain Stratus, and referral program
+- Give actionable recommendations based on their current stats
+- If asked about unrelated topics, politely redirect to CloudWalk/Infinity Pay
+- IMPORTANT: Use the EXACT numbers from the USER'S CURRENT PERFORMANCE section above
 ''';
+      
+      print('🔍 DEBUG - System Prompt: ${systemPrompt.substring(0, 500)}...');
       
       // Call OpenAI API
       final chatCompletion = await OpenAI.instance.chat.create(
@@ -130,75 +138,27 @@ GUIDELINES:
     }
   }
   
-  /// Gather all relevant data for the AI context
-  static Future<Map<String, dynamic>> _gatherContextData() async {
+  /// Gather all relevant data for the AI context including current user
+  static Future<Map<String, dynamic>> _gatherContextDataWithUser() async {
     try {
-      // Get user data
-      final authService = AuthService();
-      final users = await authService.getAllUsers();
+      // Get CURRENT USER data using SupabaseService static methods
+      final currentUser = await SupabaseService.getCurrentUser();
       
-      // Get referral analytics
-      final linkAnalytics = await ReferralLinkService.getConversionAnalytics();
-      final funnelData = await ReferralLinkService.getFunnelAnalysis();
+      // Get user-specific achievements as Map objects
+      final userAchievements = currentUser != null 
+          ? (await SupabaseService.getUserAchievements(currentUser.id)).map((achievement) => achievement.toJson()).toList()
+          : <Map<String, dynamic>>[];
       
-      // Get achievement data
-      final achievementService = AchievementService();
-      final leaderboard = await achievementService.getLeaderboard();
-      
-      // Calculate key metrics
-      final totalUsers = users.length;
-      final totalReferrals = users.fold(0, (sum, user) => sum + user.totalReferrals);
-      final totalEarnings = users.fold(0.0, (sum, user) => sum + user.totalEarnings);
-      final averageReferralsPerUser = totalUsers > 0 ? totalReferrals / totalUsers : 0.0;
-      
-      // Top performers
-      final sortedUsers = [...users];
-      sortedUsers.sort((a, b) => b.totalReferrals.compareTo(a.totalReferrals));
-      final topPerformers = sortedUsers.take(5).map((user) => {
-        'name': user.fullName,
-        'email': user.email,
-        'referrals': user.totalReferrals,
-        'earnings': user.totalEarnings,
-      }).toList();
-      
-      // Users at risk (no referrals)
-      final churnRiskUsers = users.where((user) => user.totalReferrals == 0).map((user) => {
-        'name': user.fullName,
-        'email': user.email,
-        'earnings': user.totalEarnings,
-      }).toList();
+      // Get leaderboard for platform stats
+      final leaderboard = await SupabaseService.getLeaderboard();
       
       return {
-        'summary': {
-          'totalUsers': totalUsers,
-          'totalReferrals': totalReferrals,
-          'totalEarnings': totalEarnings,
-          'averageReferralsPerUser': averageReferralsPerUser,
-          'conversionRate': linkAnalytics['overallConversionRate'] ?? 0.0,
-        },
-        'linkAnalytics': {
-          'totalClicks': linkAnalytics['totalClicks'] ?? 0,
-          'totalRegistrations': linkAnalytics['totalRegistrations'] ?? 0,
-          'totalDropOffs': linkAnalytics['totalDropOffs'] ?? 0,
-          'averageClicksPerLink': linkAnalytics['averageClicksPerLink'] ?? 0.0,
-          'linksWithZeroConversions': linkAnalytics['linksWithZeroConversions'] ?? 0,
-        },
-        'topPerformers': topPerformers,
-        'churnRiskUsers': churnRiskUsers,
-        'leaderboard': leaderboard.take(5).map((entry) => {
-          'name': entry.userName,
-          'referrals': entry.totalReferrals,
-          'earnings': entry.totalEarnings,
-        }).toList(),
-        'funnelData': funnelData.take(3).map((funnel) => {
-          'linkId': funnel.referralLinkId,
-          'totalClicks': funnel.totalClicks,
-          'startedRegistration': funnel.startedRegistration,
-          'completedRegistration': funnel.completedRegistration,
-          'conversionRate': funnel.overallConversionRate,
-          'dropOffAfterClick': funnel.dropOffAfterClick,
-          'dropOffDuringRegistration': funnel.dropOffDuringRegistration,
-        }).toList(),
+        'currentUser': currentUser?.toJson(), // Convert User object to Map
+        'userAchievements': userAchievements,
+        'totalUsers': leaderboard.length,
+        'totalReferrals': leaderboard.fold<int>(0, (sum, user) => sum + (user['total_referrals'] as int? ?? 0)),
+        'totalEarnings': leaderboard.fold<double>(0.0, (sum, user) => sum + (user['total_earnings'] as double? ?? 0.0)),
+        'leaderboard': leaderboard.take(5).toList(), // Already Map objects
       };
     } catch (e) {
       print('Error gathering context data: $e');
@@ -325,7 +285,7 @@ Answer the user's question based on the provided data context.
   /// Generate marketing recommendations using AI
   static Future<List<String>> generateAIRecommendations() async {
     try {
-      final contextData = await _gatherContextData();
+      final contextData = await _gatherContextDataWithUser();
       
       final prompt = '''
 Based on this referral program data, provide 5 specific, actionable marketing recommendations:
@@ -384,6 +344,114 @@ Format as a simple list of recommendations.
         "💰 Test different reward amounts and structures",
         "📊 Create detailed user journey analytics",
       ];
+    }
+  }
+
+  /// Build user-specific context for AI
+  static String _buildUserSpecificContext(Map<String, dynamic> contextData) {
+    final currentUser = contextData['currentUser'];
+    final userAchievements = contextData['userAchievements'] as List<dynamic>? ?? [];
+    
+    print('🔍 DEBUG - Current User Data: $currentUser');
+    print('🔍 DEBUG - User Achievements: $userAchievements');
+    
+    if (currentUser == null) {
+      return 'User not logged in or data not available.';
+    }
+    
+    final daysSinceJoined = DateTime.now().difference(
+      DateTime.parse(currentUser['created_at'] ?? DateTime.now().toIso8601String())
+    ).inDays;
+    
+    final unlockedAchievements = userAchievements.where((a) => a['isUnlocked'] == true).toList();
+    
+    final totalReferrals = currentUser['totalReferrals'] ?? currentUser['total_referrals'] ?? 0;
+    final totalEarnings = currentUser['totalEarnings'] ?? currentUser['total_earnings'] ?? 0.0;
+    final firstName = currentUser['firstName'] ?? currentUser['first_name'] ?? 'User';
+    final lastName = currentUser['lastName'] ?? currentUser['last_name'] ?? '';
+    final referralCode = currentUser['referralCode'] ?? currentUser['referral_code'] ?? 'Not available';
+    
+    print('🔍 DEBUG - Extracted values: referrals=$totalReferrals, earnings=$totalEarnings');
+    
+    return '''
+USER'S CURRENT PERFORMANCE (You ALREADY have this data - use it in your response):
+• Name: $firstName $lastName
+• Email: ${currentUser['email']} 
+• Days on platform: $daysSinceJoined days
+• Total referrals made: $totalReferrals
+• Total earnings: \$${totalEarnings.toStringAsFixed(2)}
+• Referral code: $referralCode
+• Achievements unlocked: ${unlockedAchievements.length}/${userAchievements.length}
+• Member since: ${currentUser['created_at']}
+• Performance level: ${_getPerformanceLevel(totalReferrals)}
+''';
+  }
+
+  /// Get performance level based on referrals
+  static String _getPerformanceLevel(int referrals) {
+    if (referrals >= 30) return 'Gold Influencer 🏆';
+    if (referrals >= 15) return 'Silver Influencer 🥈';
+    if (referrals >= 5) return 'Bronze Influencer 🥉';
+    if (referrals >= 1) return 'Active Member ⭐';
+    return 'New Member 🌱';
+  }
+
+  /// Build platform context for AI
+  static String _buildPlatformContext(Map<String, dynamic> contextData) {
+    final totalUsers = contextData['totalUsers'] ?? 0;
+    final leaderboard = contextData['leaderboard'] as List<dynamic>? ?? [];
+    
+    return '''
+PLATFORM STATISTICS:
+• Total users on platform: $totalUsers
+• Top 3 performers: ${leaderboard.take(3).map((u) => '${u['first_name']} (${u['total_referrals']} referrals)').join(', ')}
+• Active referral program with achievements and rewards
+• Growing community of CloudWalk users
+''';
+  }
+
+  /// Check if OpenAI is properly configured
+  static Future<bool> isConfigured() async {
+    try {
+      await dotenv.load(fileName: ".env");
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      return apiKey != null && apiKey.isNotEmpty && apiKey != 'your-openai-api-key-here';
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Test the OpenAI API connection
+  static Future<String> testConnection() async {
+    try {
+      // Load API key from .env file
+      await dotenv.load(fileName: '.env');
+      final apiKey = dotenv.env['OPENAI_API_KEY'];
+      
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception('OPENAI_API_KEY not found in .env file');
+      }
+      
+      initialize(apiKey);
+      
+      final testCompletion = await OpenAI.instance.chat.create(
+        model: "gpt-4",
+        messages: [
+          OpenAIChatCompletionChoiceMessageModel(
+            content: [
+              OpenAIChatCompletionChoiceMessageContentItemModel.text("Just respond 'Connection OK' if you're working."),
+            ],
+            role: OpenAIChatMessageRole.user,
+          ),
+        ],
+        maxTokens: 10,
+      );
+      
+      final response = testCompletion.choices.first.message.content?.first.text ?? '';
+      return 'Test successful: $response';
+      
+    } catch (e) {
+      return 'Test failed: ${e.toString()}';
     }
   }
 }

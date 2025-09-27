@@ -76,7 +76,7 @@ class OpenAIService {
       );
       
       final aiResponse = chatCompletion.choices.first.message.content?.first.text ?? 
-                        "Desculpe, não consegui processar sua consulta.";
+                        "Sorry, I couldn't process your query.";
       
       // Parse and structure the response
       final parsedResponse = _parseAIResponse(aiResponse, userQuery);
@@ -259,59 +259,60 @@ Responda à consulta do administrador com análises profundas e recomendações 
     } else {
       // Regular user prompt - Marketing assistance and personal insights
       return '''
-Você é um Assistente de Marketing Personalizado da CloudWalk, especializado em ajudar usuários do programa de indicações a maximizarem seus resultados. Você combina conhecimento sobre a empresa com insights personalizados baseados nos dados individuais do usuário.
+You are CloudWalk's Personalized Marketing Assistant, specialized in helping referral program users maximize their results. You combine company knowledge with personalized insights based on individual user data.
 
-CONTEXTO DA EMPRESA:
-- Empresa: CloudWalk (Fintech brasileira que revoluciona pagamentos)
-- Produto: Infinity Pay (plataforma completa de pagamentos para negócios)
-- Programa: Indicações com recompensas - ganhe dinheiro indicando outros empreendedores
-- Mercado: Brasil, focado em pequenos e médios negócios
+COMPANY CONTEXT:
+- Company: CloudWalk (Brazilian fintech revolutionizing payments)
+- Product: Infinity Pay (complete payment platform for businesses)
+- Program: Referrals with rewards - earn money by referring other entrepreneurs
+- Market: Brazil, focused on small and medium businesses
 
-DADOS GERAIS DO PROGRAMA:
+PROGRAM DATA:
 ${jsonEncode(context)}
 
-SEU PAPEL COMO ASSISTENTE:
-- Tirar dúvidas EXCLUSIVAMENTE sobre CloudWalk, Infinity Pay e o programa de indicações
-- Fornecer insights de marketing personalizados baseados no perfil do usuário
-- Ajudar usuários a aumentarem suas indicações e ganhos
-- Dar dicas práticas de marketing e engajamento relacionadas ao programa
-- Analisar desempenho individual e sugerir melhorias no programa
-- Educar sobre estratégias de crescimento no mercado brasileiro para indicações
+YOUR ROLE AS ASSISTANT:
+- Answer questions EXCLUSIVELY about CloudWalk, Infinity Pay and the referral program
+- Provide personalized marketing insights based on user profile
+- Help users increase their referrals and earnings
+- Give practical marketing and engagement tips related to the program
+- Analyze individual performance and suggest program improvements
+- Educate about growth strategies in the Brazilian market for referrals
 
-REGRAS DE ESCOPO ESTRITAS:
-🚫 NÃO RESPONDER sobre qualquer assunto que não seja:
-- CloudWalk (empresa fintech brasileira)
-- Infinity Pay (produto/plataforma)
-- Programa de indicações/referrals da CloudWalk
-- Desempenho pessoal no programa (indicações, ganhos, códigos)
-- Dicas de marketing específicas para indicações
-- Funcionalidades da conta no programa
+STRICT SCOPE RULES:
+🚫 DO NOT ANSWER about any subject other than:
+- CloudWalk (Brazilian fintech company)
+- Infinity Pay (product/platform)
+- CloudWalk referral program
+- Personal performance in the program (referrals, earnings, codes)
+- Specific marketing tips for referrals
+- Account functionalities in the program
 
-🚫 RECUSAR POLITICAMENTE perguntas sobre:
-- Política, religião, esportes, entretenimento
-- Outras empresas fintech ou concorrentes
-- Tecnologias não relacionadas ao CloudWalk
-- Assuntos pessoais não relacionados ao programa
-- Qualquer tópico fora do escopo definido acima
+🚫 POLITELY REFUSE questions about:
+- Politics, religion, sports, entertainment
+- Other fintech companies or competitors
+- Technologies not related to CloudWalk
+- Personal matters not related to the program
+- Any topic outside the scope defined above
 
-CAPACIDADES PARA USUÁRIOS:
-1. **Educação sobre a Empresa**: Explicar CloudWalk, Infinity Pay, benefícios do programa
-2. **Insights Personalizados**: Análise baseada em dados individuais (dias no app, indicações feitas)
-3. **Dicas de Marketing**: Estratégias práticas para aumentar indicações
-4. **Análise de Performance**: Feedback sobre progresso e comparações saudáveis
-5. **Suporte Motivacional**: Incentivos e gamificação para manter engajamento
-6. **Orientações Estratégicas**: Como construir network e identificar oportunidades
+CAPABILITIES FOR USERS:
+1. **Company Education**: Explain CloudWalk, Infinity Pay, program benefits
+2. **Personalized Insights**: Analysis based on individual data (days in app, referrals made)
+3. **Marketing Tips**: Practical strategies to increase referrals
+4. **Performance Analysis**: Feedback on progress and healthy comparisons
+5. **Motivational Support**: Incentives and gamification to maintain engagement
+6. **Strategic Guidance**: How to build network and identify opportunities
 
-DIRETRIZES PARA USUÁRIOS:
-- Seja amigável, motivador e acessível
-- Use linguagem simples, evite jargões técnicos desnecessários
-- Personalize respostas baseadas no perfil e histórico do usuário
-- Foque em ações práticas e imediatas que gerem resultados
-- Incentive participação ativa e compartilhamento
-- Sempre mantenha tom positivo e construtivo
-- Se a pergunta for fora do escopo, redirecione educadamente para tópicos relacionados ao CloudWalk
+GUIDELINES FOR USERS:
+- Be friendly, motivating and accessible
+- Use simple language, avoid unnecessary technical jargon
+- Personalize responses based on user profile and history
+- Focus on practical and immediate actions that generate results
+- Encourage active participation and sharing
+- Always maintain positive and constructive tone
+- If the question is out of scope, politely redirect to CloudWalk-related topics
+- Always respond in English
 
-Responda à pergunta do usuário de forma personalizada, educativa e motivacional, baseando-se tanto no contexto geral quanto em dados específicos quando disponíveis. Se a pergunta não for relacionada ao CloudWalk ou ao programa de indicações, explique educadamente que você só pode ajudar com assuntos relacionados à empresa e ao programa.
+Respond to the user's question in a personalized, educational and motivational way, based on both general context and specific data when available. If the question is not related to CloudWalk or the referral program, politely explain that you can only help with matters related to the company and program.
 ''';
     }
   }
@@ -349,34 +350,34 @@ Responda à pergunta do usuário de forma personalizada, educativa e motivaciona
     
     if (query.contains('performance') || query.contains('desempenho')) {
       return [
-        "Como posso melhorar os usuários com baixo desempenho?",
-        "Quais fatores motivam os top performers?",
-        "Mostre-me a análise detalhada de conversão",
+        "How can I improve underperforming users?",
+        "What factors motivate top performers?",
+        "Show me detailed conversion analysis",
       ];
     } else if (query.contains('churn') || query.contains('abandono')) {
       return [
-        "Que estratégias de retenção funcionam melhor?",
-        "Como reengajar usuários inativos?",
-        "Quais são os padrões de comportamento dos usuários?",
+        "What retention strategies work best?",
+        "How to re-engage inactive users?",
+        "What are user behavior patterns?",
       ];
     } else if (query.contains('conversão') || query.contains('funil')) {
       return [
-        "Onde a maioria dos usuários abandona o processo?",
-        "Como melhorar as taxas de conversão?",
-        "Qual é o processo de indicação ideal?",
+        "Where do most users drop off in the process?",
+        "How to improve conversion rates?",
+        "What is the ideal referral process?",
       ];
     } else if (query.contains('crescimento') || query.contains('estratégia')) {
       return [
-        "Que estratégias de crescimento devo priorizar?",
-        "Quais são as melhores oportunidades de mercado?",
-        "Como escalar o programa de indicação?",
+        "What growth strategies should I prioritize?",
+        "What are the best market opportunities?",
+        "How to scale the referral program?",
       ];
     } else {
       return [
-        "Analise meus top performers",
-        "Mostre-me a análise de risco de churn",
-        "Como está meu funil de conversão?",
-        "Que estratégias de crescimento você recomenda?",
+        "Analyze my top performers",
+        "Show me churn risk analysis",
+        "How is my conversion funnel?",
+        "What growth strategies do you recommend?",
       ];
     }
   }
@@ -585,7 +586,7 @@ Format as a simple list of recommendations in English.
         messages: [
           OpenAIChatCompletionChoiceMessageModel(
             content: [
-              OpenAIChatCompletionChoiceMessageContentItemModel.text("Responda apenas 'Conexão OK' se você está funcionando."),
+              OpenAIChatCompletionChoiceMessageContentItemModel.text("Just respond 'Connection OK' if you're working."),
             ],
             role: OpenAIChatMessageRole.user,
           ),
@@ -594,10 +595,10 @@ Format as a simple list of recommendations in English.
       );
       
       final response = testCompletion.choices.first.message.content?.first.text ?? '';
-      return 'Teste bem-sucedido: $response';
+      return 'Test successful: $response';
       
     } catch (e) {
-      return 'Teste falhou: ${e.toString()}';
+      return 'Test failed: ${e.toString()}';
     }
   }
 }

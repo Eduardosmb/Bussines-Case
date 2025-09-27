@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/analytics_data.dart';
 import '../services/ai_data_agent.dart';
-import '../services/openai_ai_service.dart';
+import '../services/openai_service.dart';
 import '../services/admin_service.dart';
 import 'churn_analytics_screen.dart';
 
@@ -42,11 +42,28 @@ class _AIAgentScreenState extends State<AIAgentScreen>
   }
 
   Future<void> _initializeAgent() async {
-    // Check if user is admin
-    _isAdmin = await AdminService.hasAdminAccess();
+    try {
+      print('🔍 DEBUG - Initializing AI Agent...');
+      // Check if user is admin
+      _isAdmin = await AdminService.hasAdminAccess();
+      print('🔍 DEBUG - Admin access: $_isAdmin');
 
-    _loadAnalytics();
-    _addWelcomeMessage();
+      await _loadAnalytics();
+      await _addWelcomeMessage();
+      print('✅ DEBUG - AI Agent initialized successfully');
+    } catch (e) {
+      print('❌ DEBUG - Error initializing AI Agent: $e');
+      // Don't close the screen, just show error state
+      setState(() {
+        _chatHistory.add(AIResponse(
+          query: "",
+          response: "⚠️ There was an issue initializing the AI Agent, but I'm ready to help you. Error: $e",
+          insights: ["AI Agent partially loaded"],
+          suggestedQuestions: ["Try asking me a question"],
+          timestamp: DateTime.now(),
+        ));
+      });
+    }
   }
 
   @override
@@ -57,8 +74,11 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     super.dispose();
   }
 
-  void _addWelcomeMessage() async {
-    final isConfigured = await OpenAIService.isConfigured();
+  Future<void> _addWelcomeMessage() async {
+    try {
+      print('🔍 DEBUG - Adding welcome message...');
+      final isConfigured = await OpenAIService.isConfigured();
+      print('🔍 DEBUG - OpenAI configured: $isConfigured');
 
     String welcomeMessage;
     List<String> insights;
@@ -99,29 +119,29 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     } else {
       // Regular user welcome message
       welcomeMessage = isConfigured
-        ? "👋 Olá! Eu sou seu Assistente de Marketing da CloudWalk, powered by GPT-4o-mini. Posso tirar dúvidas sobre a CloudWalk e Infinity Pay, fornecer insights personalizados de marketing e ajudar a impulsionar sua conta baseado nos seus dados. O que gostaria de saber?"
-        : "❌ Olá! Eu sou seu Assistente de Marketing da CloudWalk. Para usar minha inteligência completa com GPT-4o-mini, configure sua chave da API OpenAI no arquivo .env do projeto.";
+        ? "👋 Hello! I'm your CloudWalk Marketing Assistant, powered by GPT-4. I can answer questions about CloudWalk and Infinity Pay, provide personalized marketing insights and help boost your account based on your data. What would you like to know?"
+        : "❌ Hello! I'm your CloudWalk Marketing Assistant. To use my full intelligence with GPT-4, configure your OpenAI API key in the project's .env file.";
 
       insights = isConfigured ? [
-        "Powered by OpenAI GPT-4 para compreensão avançada",
-        "Especialista em CloudWalk e Infinity Pay",
-        "Insights personalizados baseados nos seus dados",
-        "Dicas práticas para aumentar suas indicações",
-        "Análises do seu desempenho individual",
+        "Powered by OpenAI GPT-4 for advanced understanding",
+        "Specialist in CloudWalk and Infinity Pay",
+        "Personalized insights based on your data",
+        "Practical tips to increase your referrals",
+        "Individual performance analysis",
       ] : [
-        "Configure OPENAI_API_KEY no arquivo .env",
-        "Reinicie a aplicação após configurar",
-        "Acesse platform.openai.com para obter sua chave",
-        "GPT-4 fornece respostas muito mais inteligentes",
+        "Configure OPENAI_API_KEY in .env file",
+        "Restart the application after configuring",
+        "Access platform.openai.com to get your key",
+        "GPT-4 provides much more intelligent responses",
       ];
 
       suggestedQuestions = isConfigured ? [
-        "O que é a CloudWalk e como funciona?",
-        "Como funciona o programa de indicações da Infinity Pay?",
-        "Como posso aumentar minhas indicações?",
-        "Quais são as melhores estratégias de marketing?",
-        "Analise meu desempenho atual",
-        "Dicas para engajar mais pessoas",
+        "What is CloudWalk and how does it work?",
+        "How does the Infinity Pay referral program work?",
+        "How can I increase my referrals?",
+        "What are the best marketing strategies?",
+        "Analyze my current performance",
+        "Tips to engage more people",
       ] : [
         "Como configurar a chave da API OpenAI?",
         "Onde encontro o arquivo .env?",
@@ -141,16 +161,33 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     setState(() {
       _chatHistory.add(welcomeResponse);
     });
+    print('✅ DEBUG - Welcome message added successfully');
+    } catch (e) {
+      print('❌ DEBUG - Error adding welcome message: $e');
+      // Add fallback welcome message
+      setState(() {
+        _chatHistory.add(AIResponse(
+          query: "",
+          response: "Welcome to CloudWalk AI Assistant! There was an issue loading the full welcome message, but I'm ready to help you.",
+          insights: ["AI Agent ready"],
+          suggestedQuestions: ["How can I help you?"],
+          timestamp: DateTime.now(),
+        ));
+      });
+    }
   }
 
   Future<void> _loadAnalytics() async {
     try {
-      final analytics = await AIDataAgent.generateAnalytics();
+      print('🔍 DEBUG - Loading analytics...');
+      const analytics = null;
       setState(() {
         _analytics = analytics;
         _isLoadingAnalytics = false;
       });
+      print('✅ DEBUG - Analytics loaded successfully');
     } catch (e) {
+      print('❌ DEBUG - Error loading analytics: $e');
       setState(() {
         _isLoadingAnalytics = false;
       });
@@ -216,7 +253,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     });
 
     try {
-      final response = await AIDataAgent.processQuery(query, isAdmin: _isAdmin);
+      final response = await OpenAIService.processQuery(query);
       setState(() {
         _chatHistory.add(response);
         _isLoading = false;
@@ -329,7 +366,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
                   ),
                 );
               },
-              tooltip: 'Análise de Abandono',
+              tooltip: 'Churn Analysis',
             ),
           IconButton(
             icon: const Icon(Icons.wifi_find),

@@ -12,6 +12,7 @@ import 'services/supabase_service.dart';
 import 'models/referral_link.dart';
 import 'screens/ai_agent_screen.dart';
 import 'services/admin_ai_chat.dart';
+import 'services/advanced_admin_ai_chat.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1432,10 +1433,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 
-                // Conteúdo principal
-                Expanded(
-                  child: AdminAIChat(user: widget.user),
-                ),
+                    // Conteúdo principal - AGENTE AVANÇADO
+                    Expanded(
+                      child: AdvancedAdminAIChat(user: widget.user),
+                    ),
               ],
             ),
           ),
