@@ -267,6 +267,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Achievement> _achievements = [];
   ReferralLink? _userReferralLink;
   bool _isLoading = true;
+  bool _isAchievementsExpanded = false;
 
   @override
   void initState() {
@@ -550,7 +551,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         
                         const SizedBox(height: 24),
                         
-                        // ACHIEVEMENTS - Design mais elegante
+                        // ACHIEVEMENTS - Design com dropdown
                         if (_achievements.isNotEmpty) ...[
                           Container(
                             width: double.infinity,
@@ -569,47 +570,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.emoji_events, color: Colors.black),
-                                    const SizedBox(width: 12),
-                                    const Text(
-                                      'Achievements',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _isAchievementsExpanded = !_isAchievementsExpanded;
+                                    });
+                                  },
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.emoji_events, color: Colors.black),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Achievements',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        '${_achievements.where((a) => a.isUnlocked).length}/${_achievements.length}',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        _isAchievementsExpanded 
+                                          ? Icons.keyboard_arrow_up 
+                                          : Icons.keyboard_arrow_down,
                                         color: Colors.black,
                                       ),
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      '${_achievements.where((a) => a.isUnlocked).length}/${_achievements.length}',
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(height: 20),
-                                GridView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 4,
-                                    crossAxisSpacing: 16,
-                                    mainAxisSpacing: 16,
-                                    childAspectRatio: 0.8,
+                                _buildAchievementGrid(_getDisplayAchievements(showAll: _isAchievementsExpanded)),
+                                if (!_isAchievementsExpanded && _achievements.length > 3) ...[
+                                  const SizedBox(height: 10),
+                                  Center(
+                                    child: Text(
+                                      'Clique para ver mais ${_achievements.length - 3} achievements',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
                                   ),
-                                  itemCount: _achievements.length,
-                                  itemBuilder: (context, index) {
-                                    final achievement = _achievements[index];
-                                    return GestureDetector(
-                                      onTap: () => _showAchievementDetail(achievement),
-                                      child: _buildModernAchievementBadge(achievement),
-                                    );
-                                  },
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -811,6 +822,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // Sort achievements: unlocked first, then locked
+  List<Achievement> _getSortedAchievements() {
+    final List<Achievement> sortedList = List.from(_achievements);
+    sortedList.sort((a, b) {
+      // First sort by unlock status (unlocked first)
+      if (a.isUnlocked && !b.isUnlocked) return -1;
+      if (!a.isUnlocked && b.isUnlocked) return 1;
+      
+      // If both have same unlock status, maintain original order
+      return 0;
+    });
+    return sortedList;
+  }
+
+  // Get achievements to display based on expanded state
+  List<Achievement> _getDisplayAchievements({required bool showAll}) {
+    final sortedAchievements = _getSortedAchievements();
+    if (showAll) {
+      return sortedAchievements;
+    } else {
+      // Show only first 3 achievements when collapsed
+      return sortedAchievements.take(3).toList();
+    }
+  }
+
+  // Build achievement grid widget
+  Widget _buildAchievementGrid(List<Achievement> achievementsToShow) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
+        childAspectRatio: 1.1,
+      ),
+      itemCount: achievementsToShow.length,
+      itemBuilder: (context, index) {
+        final achievement = achievementsToShow[index];
+        return Tooltip(
+          message: '${achievement.title}\n${achievement.description}\n${achievement.isUnlocked ? "✅ Completed!" : "🔒 Locked"}',
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          textStyle: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+          ),
+          waitDuration: const Duration(milliseconds: 500),
+          child: GestureDetector(
+            onTap: () => _showAchievementDetail(achievement),
+            child: _buildCompactAchievementBadge(achievement),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildModernStatCard(String title, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -899,19 +969,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildModernAchievementBadge(Achievement achievement) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 60,
-          height: 60,
+          width: 55,
+          height: 55,
           decoration: BoxDecoration(
             color: achievement.isUnlocked ? Colors.black : Colors.grey[200],
             shape: BoxShape.circle,
             boxShadow: achievement.isUnlocked
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
                   ]
                 : null,
@@ -920,7 +991,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: achievement.isUnlocked
                 ? Text(
                     achievement.icon,
-                    style: const TextStyle(fontSize: 24),
+                    style: const TextStyle(fontSize: 22),
                   )
                 : ColorFiltered(
                     colorFilter: const ColorFilter.matrix([
@@ -931,16 +1002,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ]),
                     child: Text(
                       achievement.icon,
-                      style: const TextStyle(fontSize: 24),
+                      style: const TextStyle(fontSize: 22),
                     ),
                   ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           achievement.title.split(' ').last,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
             color: achievement.isUnlocked ? Colors.black : Colors.grey[500],
           ),
@@ -949,6 +1020,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ],
+    );
+  }
+
+  Widget _buildCompactAchievementBadge(Achievement achievement) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(
+              color: achievement.isUnlocked ? Colors.black : Colors.grey[200],
+              shape: BoxShape.circle,
+              boxShadow: achievement.isUnlocked
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Center(
+              child: achievement.isUnlocked
+                  ? Text(
+                      achievement.icon,
+                      style: const TextStyle(fontSize: 18),
+                    )
+                  : ColorFiltered(
+                      colorFilter: const ColorFilter.matrix([
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0.2126, 0.7152, 0.0722, 0, 0,
+                        0, 0, 0, 1, 0,
+                      ]),
+                      child: Text(
+                        achievement.icon,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            achievement.title.split(' ').last,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: achievement.isUnlocked ? Colors.black : Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
