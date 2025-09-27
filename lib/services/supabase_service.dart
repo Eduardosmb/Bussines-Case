@@ -494,30 +494,18 @@ class SupabaseService {
           final prizeAmount = prize['amount'] as double;
           
           // Check if user already received this specific leaderboard prize
-          final existingPrize = await client
-              .from('user_achievements')
-              .select()
-              .eq('user_id', userId)
-              .eq('achievement_id', 'leaderboard_${userRank}')
-              .limit(1);
+          // We'll use a simple metadata table or check for a specific pattern in user profile
+          final currentEarnings = user['total_earnings'] as num;
+          final expectedEarnings = _calculateExpectedEarnings(user, userRank);
           
-          if (existingPrize.isEmpty) {
+          if (currentEarnings < expectedEarnings) {
             print('🏆 Awarding leaderboard prize to rank $userRank: ${user['full_name']}');
             
-            // Create achievement record
-            await client.from('user_achievements').insert({
-              'user_id': userId,
-              'achievement_id': 'leaderboard_${userRank}',
-              'is_unlocked': true,
-              'unlocked_at': DateTime.now().toIso8601String(),
-              'progress': 100,
-            });
-            
-            // Add prize money
+            // Add prize money directly
             await client
                 .from('users')
                 .update({
-                  'total_earnings': (user['total_earnings'] as num) + prizeAmount,
+                  'total_earnings': currentEarnings + prizeAmount,
                 })
                 .eq('id', userId);
             
@@ -528,6 +516,29 @@ class SupabaseService {
     } catch (e) {
       print('❌ Error awarding leaderboard prizes: $e');
     }
+  }
+  
+  static double _calculateExpectedEarnings(Map<String, dynamic> user, int rank) {
+    // Calculate what the user should have based on referrals + leaderboard prize
+    final referrals = user['total_referrals'] as int;
+    final isReferred = user['referred_by'] != null;
+    
+    double expected = 0.0;
+    
+    // Signup bonus if they were referred
+    if (isReferred) expected += 25.0;
+    
+    // Referral bonuses (they get $0 per referral, referrers get $50)
+    // No direct bonus for making referrals
+    
+    // Leaderboard prizes
+    switch (rank) {
+      case 1: expected += 100.0; break;
+      case 2: expected += 50.0; break;
+      case 3: expected += 25.0; break;
+    }
+    
+    return expected;
   }
 
   // ==================== ANALYTICS FOR AI AGENT ====================
