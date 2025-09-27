@@ -1,7 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/user.dart';
-import '../models/referral_link.dart';
 import '../models/achievement.dart';
 
 class SupabaseService {
@@ -404,50 +403,7 @@ class SupabaseService {
 
   // ==================== REFERRAL OPERATIONS ====================
   
-  static Future<ReferralLink?> createReferralLink(String userId, String title) async {
-    try {
-      final linkCode = _generateReferralCode();
-      return ReferralLink(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: userId,
-        userName: 'User',
-        linkCode: linkCode,
-        fullUrl: 'https://cloudwalk.app/referral/$linkCode',
-        createdAt: DateTime.now(),
-        clickCount: 0,
-        registrationCount: 0,
-        clicks: const [],
-        completedRegistrations: const [],
-      );
-    } catch (e) {
-      print('Error creating referral link: $e');
-      rethrow;
-    }
-  }
 
-  static Future<List<ReferralLink>> getUserReferralLinks(String userId) async {
-    try {
-      // Return mock data for now
-      return [
-        await createReferralLink(userId, 'Convite CloudWalk 🚀') ?? 
-        ReferralLink(
-          id: '1',
-          userId: userId,
-          userName: 'User',
-          linkCode: _generateReferralCode(),
-          fullUrl: 'https://cloudwalk.app/referral/ABC123',
-          createdAt: DateTime.now(),
-          clickCount: 5,
-          registrationCount: 2,
-          clicks: const [],
-          completedRegistrations: const [],
-        ),
-      ];
-    } catch (e) {
-      print('Error getting referral links: $e');
-      return [];
-    }
-  }
 
   // ==================== ACHIEVEMENT OPERATIONS ====================
   

@@ -4,7 +4,6 @@ import '../models/analytics_data.dart';
 import '../models/user.dart';
 import 'supabase_service.dart';
 import 'openai_service.dart';
-import 'smart_analytics_service.dart';
 
 class AdvancedAdminAIChat extends StatefulWidget {
   final User user;
@@ -33,20 +32,20 @@ class _AdvancedAdminAIChatState extends State<AdvancedAdminAIChat> {
     setState(() => _isLoading = true);
     
     try {
-      // Load REAL intelligent analytics from actual user data
-      final smartAnalytics = await SmartAnalyticsService.getIntelligentAnalytics();
+      print('🔍 Loading advanced analytics for admin...');
       
-      // Load basic analytics for compatibility
-      final basicAnalytics = await SupabaseService.getAdvancedAnalytics(widget.user.id);
+      // Load comprehensive analytics from Supabase
+      final advancedAnalytics = await SupabaseService.getAdvancedAnalytics(widget.user.id);
+      print('✅ Advanced analytics loaded: ${advancedAnalytics.keys}');
       
       setState(() {
-        _analyticsData = basicAnalytics;
-        _advancedMetrics = smartAnalytics; // Now contains REAL intelligent analysis
+        _analyticsData = advancedAnalytics;
+        _advancedMetrics = advancedAnalytics; // Use the same data for advanced metrics
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      print('Error loading smart analytics: $e');
+      print('❌ Error loading advanced analytics: $e');
     }
   }
 
@@ -131,47 +130,86 @@ I give you text-based analysis and recommendations using your real business data
   }
 
   Future<String> _processAdvancedAdminQuery(String query) async {
-    // REAL DATA INTELLIGENCE - No fake data, only sophisticated analysis
-    final enhancedContext = '''
-You are CloudWalk's Advanced AI Analytics Assistant with REAL-TIME analysis of actual user data.
+    try {
+      print('🔍 Processing advanced admin query with real data...');
+      
+      // Ensure analytics data is loaded
+      if (_analyticsData == null) {
+        await _loadAdvancedAnalytics();
+      }
 
-🧠 INTELLIGENT USER SEGMENTATION (REAL DATA):
-${_buildUserSegmentationContext()}
+      // Build comprehensive context with REAL data - FORCE OpenAI to use it  
+      final overview = _analyticsData!['overview'] ?? {};
+      final riskAnalysis = _analyticsData!['risk_analysis'] ?? {};
+      final oldestInactiveUsers = riskAnalysis['oldest_inactive_users'] as List? ?? [];
+      
+      final businessContext = '''
+You are CloudWalk's Business Intelligence AI Assistant. You work for CloudWalk as the PLATFORM ADMINISTRATOR.
 
-⚠️ SOPHISTICATED CHURN RISK ANALYSIS (REAL BEHAVIORAL PATTERNS):
-${_buildChurnAnalysisContext()}
+CONTEXT: ${widget.user.email} is the CloudWalk platform administrator asking about COMPANY-WIDE metrics, NOT personal user metrics.
 
-📈 PERFORMANCE INTELLIGENCE (ACTUAL USER BEHAVIOR):
-${_buildPerformanceContext()}
+CLOUDWALK PLATFORM DATA (ENTIRE BUSINESS):
 
-💰 FINANCIAL INTELLIGENCE (REAL EARNINGS DATA):
-${_buildFinancialContext()}
+📊 PLATFORM-WIDE BUSINESS METRICS:
+• Total Platform Users: ${overview['total_users'] ?? 0} registered users
+• Total Platform Referrals: ${overview['total_referrals'] ?? 0} referrals made by ALL users  
+• Total Platform Earnings: \$${overview['total_earnings'] ?? '0.00'} paid to ALL users
+• Platform Conversion Rate: ${_analyticsData!['performance']?['conversion_rate'] ?? '0.0'}% of ALL users making referrals
 
-🔮 PREDICTIVE ANALYTICS (DATA-DRIVEN FORECASTING):
-${_buildPredictiveContext()}
+⚠️ PLATFORM CHURN RISK ANALYSIS:
+• Platform Churn Risk: ${riskAnalysis['churn_risk_percentage'] ?? '0.0'}% of ALL platform users
+• High Risk Platform Users: ${riskAnalysis['high_churn_risk_count'] ?? 0} users (7+ days, 0 referrals)
+• Very High Risk Platform Users: ${riskAnalysis['very_high_churn_risk_count'] ?? 0} users (14+ days, 0 referrals)
 
-🎯 ACTIONABLE RECOMMENDATIONS (BASED ON REAL PATTERNS):
-${_buildRecommendationsContext()}
+🎯 PLATFORM USERS AT HIGHEST CHURN RISK:
+${oldestInactiveUsers.take(5).map((user) => '• ${user['name']} (${user['email']}) - ${user['days_since_created']} days inactive, ${user['total_referrals']} referrals').join('\n')}
 
-REAL DATA OVERVIEW:
-${_buildRealDataOverview()}
+CRITICAL INSTRUCTIONS:
+- You are answering questions about the ENTIRE CLOUDWALK PLATFORM, not individual user performance
+- When asked about "conversion rate", provide PLATFORM conversion rate (${_analyticsData!['performance']?['conversion_rate'] ?? '0.0'}%)
+- When asked about "users", you mean ALL ${overview['total_users'] ?? 0} platform users
+- When asked about "earnings", you mean total platform earnings (\$${overview['total_earnings'] ?? '0.00'})
+- You are helping the platform administrator understand BUSINESS-WIDE performance
+- All metrics are for the ENTIRE CloudWalk business, not individual users
 
-Your REAL capabilities:
-- Analyze actual user behavior patterns from database
-- Detect real churn risk based on signup dates and referral activity
-- Calculate genuine financial metrics from earnings data
-- Identify actual performance trends from user segments
-- Provide data-driven recommendations based on real user behavior
-- Predict future trends using statistical analysis of real data
-- Always respond in English with insights backed by REAL data
+INSTRUCTIONS:
+1. Use ONLY the real data provided above
+2. Give specific user names and emails when asked about churn risk
+3. Provide exact numbers from the data
+4. Respond in English
+5. NEVER claim you don't have access to data
 
-Question: $query
+USER QUESTION: $query
+
+Response must use the real data above.
 ''';
 
-    // Use enhanced OpenAI service for more intelligent responses
-    final aiResponse = await OpenAIService.processQuery(enhancedContext + '\n\nUser Question: $query');
+      print('🤖 Sending admin context to OpenAI...');
+      print('📊 DEBUG - Conversion rate in context: ${_analyticsData!['performance']?['conversion_rate']}%');
+      print('📊 DEBUG - Overview data: ${overview.toString()}');
+      print('📊 DEBUG - Performance data: ${_analyticsData!['performance'].toString()}');
+      
+      final aiResponse = await OpenAIService.processQuery(businessContext);
+      print('✅ Admin OpenAI response received');
 
-    return aiResponse.response;
+      return aiResponse.response;
+    } catch (e) {
+      print('❌ Error in _processAdvancedAdminQuery: $e');
+      return '''I apologize, but I'm experiencing a technical issue accessing your business data right now. 
+
+As your CloudWalk Admin AI Assistant, I normally have full access to:
+• Real-time user analytics and churn predictions
+• Specific user identification for targeted strategies
+• ROI calculations and growth forecasting
+• Detailed conversion and performance metrics
+
+Please try your query again, or ask me something like:
+• "Who are my highest churn risk users?"
+• "What's our current conversion rate?"
+• "Give me retention strategies based on our data"
+
+I'll work to resolve this access issue quickly.''';
+    }
   }
 
   String _buildUserSegmentationContext() {

@@ -7,11 +7,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/user.dart';
 import 'models/achievement.dart';
-import 'services/achievement_service.dart';
 import 'services/supabase_service.dart';
-import 'models/referral_link.dart';
 import 'screens/ai_agent_screen.dart';
-import 'services/admin_ai_chat.dart';
 import 'services/advanced_admin_ai_chat.dart';
 
 void main() async {
@@ -313,10 +310,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final AchievementService _achievementService = AchievementService();
   List<Achievement> _achievements = [];
   Set<String> _shownNotifications = {};
-  ReferralLink? _userReferralLink;
   bool _isLoading = true;
   bool _isAchievementsExpanded = false;
 
@@ -382,28 +377,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
       
-      // Get or create referral link from Supabase
-      final existingLinks = await SupabaseService.getUserReferralLinks(widget.user.id);
-      
-      ReferralLink? referralLink;
-      if (existingLinks.isEmpty) {
-        // Create a default referral link
-        referralLink = await SupabaseService.createReferralLink(
-          widget.user.id, 
-          'Convite CloudWalk 🚀'
-        );
-      } else {
-        referralLink = existingLinks.first;
-      }
-      
       setState(() {
         _achievements = achievements;
-        _userReferralLink = referralLink;
         _isLoading = false;
       });
 
-      // Check for new achievements
-      await _achievementService.checkAndUnlockAchievements(widget.user);
     } catch (e) {
       setState(() {
         _isLoading = false;

@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/analytics_data.dart';
-import '../services/ai_data_agent.dart';
 import '../services/openai_service.dart';
-import '../services/admin_service.dart';
-import 'churn_analytics_screen.dart';
 
 class AIAgentScreen extends StatefulWidget {
   const AIAgentScreen({super.key});
@@ -44,7 +41,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
   Future<void> _initializeAgent() async {
     try {
       // Check if user is admin
-      _isAdmin = await AdminService.hasAdminAccess();
+      _isAdmin = false; // Simplified for now
 
       await _loadAnalytics();
       await _addWelcomeMessage();
@@ -171,7 +168,12 @@ class _AIAgentScreenState extends State<AIAgentScreen>
 
   Future<void> _loadAnalytics() async {
     try {
-      const analytics = null;
+      final analytics = ReferralAnalytics(
+        totalClicks: 0,
+        totalRegistrations: 0,
+        conversionRate: 0.0,
+        roi: ROI(roiPercentage: 0.0),
+      );
       setState(() {
         _analytics = analytics;
         _isLoadingAnalytics = false;
@@ -343,20 +345,6 @@ class _AIAgentScreenState extends State<AIAgentScreen>
               );
             },
           ),
-          // Churn Analytics only for admins
-          if (_isAdmin)
-            IconButton(
-              icon: const Icon(Icons.insights),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ChurnAnalyticsScreen(),
-                  ),
-                );
-              },
-              tooltip: 'Churn Analysis',
-            ),
           IconButton(
             icon: const Icon(Icons.wifi_find),
             onPressed: _testOpenAIConnection,
