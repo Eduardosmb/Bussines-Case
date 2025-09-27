@@ -93,6 +93,22 @@ class SupabaseService {
     try {
       print('🔄 Registering user: $email');
       
+      // Check if user already exists in our custom table
+      try {
+        final existingUser = await client
+            .from('users')
+            .select()
+            .eq('email', email)
+            .single();
+        
+        if (existingUser.isNotEmpty) {
+          throw Exception('User already exists in our database. Please sign in instead.');
+        }
+      } catch (e) {
+        // User doesn't exist in our table, continue with registration
+        print('📝 User not found in custom table, proceeding with registration');
+      }
+      
       // 1. First, register with Supabase Auth
       print('📧 Creating auth user...');
       final AuthResponse authResponse = await client.auth.signUp(
@@ -294,36 +310,81 @@ class SupabaseService {
   
   static Future<List<Achievement>> getUserAchievements(String userId) async {
     try {
-      print('🏆 Getting user achievements for: $userId');
+      print('🏆 Getting achievements for user: $userId');
       
-      // Get user's achievement progress
+      // Get user data for progress calculation
+      final userResponse = await client
+          .from('users')
+          .select()
+          .eq('id', userId)
+          .single();
+      
+      final userReferrals = userResponse['total_referrals'] as int;
+      final userEarnings = (userResponse['total_earnings'] as num).toDouble();
+      
+      // Get all available achievements
+      final achievementsResponse = await client
+          .from('achievements')
+          .select()
+          .order('target_value');
+      
+      // Get user's unlocked achievements
       final userAchievementsResponse = await client
           .from('user_achievements')
-          .select('*, achievements(*)')
+          .select()
           .eq('user_id', userId);
       
       List<Achievement> achievements = [];
       
-      for (var userAchievement in userAchievementsResponse) {
-        final achievementData = userAchievement['achievements'];
-        if (achievementData != null) {
-          achievements.add(Achievement(
-            id: achievementData['id'] as String,
-            title: achievementData['title'] as String,
-            description: achievementData['description'] as String? ?? '',
-            icon: achievementData['icon'] as String? ?? '🏆',
-            type: _parseAchievementType(achievementData['type'] as String),
-            targetValue: achievementData['target_value'] as int,
-            rewardAmount: (achievementData['reward_amount'] as num?)?.toDouble() ?? 0.0,
-            isUnlocked: userAchievement['is_unlocked'] as bool? ?? false,
-            unlockedAt: userAchievement['unlocked_at'] != null 
-                ? DateTime.parse(userAchievement['unlocked_at'] as String)
-                : null,
-          ));
+      for (var achievementData in achievementsResponse) {
+        final achievementId = achievementData['id'] as String;
+        final type = achievementData['type'] as String;
+        final targetValue = achievementData['target_value'] as int;
+        
+        // Check if user has unlocked this achievement
+        final userAchievementsList = userAchievementsResponse
+            .where((ua) => ua['achievement_id'] == achievementId)
+            .toList();
+        final userAchievement = userAchievementsList.isNotEmpty ? userAchievementsList.first : null;
+        
+        // Calculate if achievement should be unlocked
+        bool shouldBeUnlocked = false;
+        switch (type) {
+          case 'referrals':
+            shouldBeUnlocked = userReferrals >= targetValue;
+            break;
+          case 'earnings':
+            shouldBeUnlocked = userEarnings >= targetValue;
+            break;
+          case 'special':
+            // Top 3 leaderboard - implement later
+            shouldBeUnlocked = false;
+            break;
         }
+        
+        final isUnlocked = userAchievement?['is_unlocked'] == true || shouldBeUnlocked;
+        
+        // Auto-unlock achievement if conditions are met but not yet unlocked
+        if (shouldBeUnlocked && userAchievement == null) {
+          await _unlockAchievement(userId, achievementId, userEarnings);
+        }
+        
+        achievements.add(Achievement(
+          id: achievementId,
+          title: achievementData['title'] as String,
+          description: achievementData['description'] as String? ?? '',
+          icon: achievementData['icon'] as String? ?? '🏆',
+          type: _parseAchievementType(type),
+          targetValue: targetValue,
+          rewardAmount: (achievementData['reward_amount'] as num?)?.toDouble() ?? 0.0,
+          isUnlocked: isUnlocked,
+          unlockedAt: userAchievement != null && userAchievement['unlocked_at'] != null 
+              ? DateTime.parse(userAchievement['unlocked_at'] as String)
+              : (shouldBeUnlocked ? DateTime.now() : null),
+        ));
       }
       
-      print('✅ Found ${achievements.length} achievements for user');
+      print('✅ Found ${achievements.length} achievements (${achievements.where((a) => a.isUnlocked).length} unlocked)');
       return achievements;
     } catch (e) {
       print('❌ Error getting achievements: $e');
@@ -337,6 +398,47 @@ class SupabaseService {
       print('Updated achievement $achievementId progress to $progress for user $userId');
     } catch (e) {
       print('Error updating achievement progress: $e');
+    }
+  }
+
+  static Future<void> _unlockAchievement(String userId, String achievementId, double currentEarnings) async {
+    try {
+      print('🎉 Unlocking achievement $achievementId for user $userId');
+      
+      // Get achievement details
+      final achievementResponse = await client
+          .from('achievements')
+          .select()
+          .eq('id', achievementId)
+          .single();
+      
+      final rewardAmount = (achievementResponse['reward_amount'] as num).toDouble();
+      final title = achievementResponse['title'] as String;
+      
+      // Insert user achievement record
+      await client.from('user_achievements').insert({
+        'user_id': userId,
+        'achievement_id': achievementId,
+        'is_unlocked': true,
+        'unlocked_at': DateTime.now().toIso8601String(),
+        'progress': 100,
+      });
+      
+      // Add reward to user's earnings
+      if (rewardAmount > 0) {
+        await client
+            .from('users')
+            .update({
+              'total_earnings': currentEarnings + rewardAmount,
+            })
+            .eq('id', userId);
+        
+        print('💰 Added \$${rewardAmount.toStringAsFixed(2)} reward for achievement: $title');
+      }
+      
+      print('✅ Achievement unlocked successfully: $title');
+    } catch (e) {
+      print('❌ Error unlocking achievement: $e');
     }
   }
 

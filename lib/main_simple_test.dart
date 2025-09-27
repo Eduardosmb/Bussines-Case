@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/user.dart';
 import 'models/achievement.dart';
 import 'services/achievement_service.dart';
@@ -300,6 +303,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final AchievementService _achievementService = AchievementService();
   List<Achievement> _achievements = [];
+  Set<String> _shownNotifications = {};
   ReferralLink? _userReferralLink;
   bool _isLoading = true;
   bool _isAchievementsExpanded = false;
@@ -307,12 +311,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _loadShownNotifications();
     _loadData();
+  }
+
+  Future<void> _loadShownNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'shown_notifications_${widget.user.id}';
+      final shownList = prefs.getStringList(key) ?? [];
+      setState(() {
+        _shownNotifications = shownList.toSet();
+      });
+      print('📱 Loaded ${_shownNotifications.length} shown notifications for user ${widget.user.id}');
+    } catch (e) {
+      print('❌ Error loading shown notifications: $e');
+    }
+  }
+
+  Future<void> _saveShownNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'shown_notifications_${widget.user.id}';
+      await prefs.setStringList(key, _shownNotifications.toList());
+      print('💾 Saved ${_shownNotifications.length} shown notifications for user ${widget.user.id}');
+    } catch (e) {
+      print('❌ Error saving shown notifications: $e');
+    }
   }
 
   Future<void> _loadData() async {
     try {
       final achievements = await SupabaseService.getUserAchievements(widget.user.id);
+      
+      // Check for newly unlocked achievements that haven't been shown yet
+      for (var achievement in achievements) {
+        // Only show notification if:
+        // 1. Achievement is unlocked
+        // 2. Achievement was unlocked recently (within last 24 hours)
+        // 3. We haven't shown this notification before
+        final notificationKey = '${widget.user.id}_${achievement.id}';
+        
+        if (achievement.isUnlocked && 
+            achievement.unlockedAt != null &&
+            DateTime.now().difference(achievement.unlockedAt!).inHours < 24 &&
+            !_shownNotifications.contains(notificationKey)) {
+          
+          // Mark as shown and save
+          _shownNotifications.add(notificationKey);
+          await _saveShownNotifications();
+          
+          // Show notification with delay
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) {
+              _showAchievementUnlockedNotification(achievement);
+            }
+          });
+        }
+      }
       
       // Get or create referral link from Supabase
       final existingLinks = await SupabaseService.getUserReferralLinks(widget.user.id);
@@ -368,6 +424,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.emoji_events),
             onPressed: () => _showAchievementsDialog(),
             tooltip: 'Achievements',
+          ),
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () => _showNotificationCenter(),
+            tooltip: 'Notification Center',
           ),
           IconButton(
             icon: const Icon(Icons.leaderboard),
@@ -1070,17 +1131,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 45,
-            height: 45,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
-              color: achievement.isUnlocked ? Colors.black : Colors.grey[200],
+              color: achievement.isUnlocked 
+                  ? Colors.black 
+                  : Colors.grey[300],
               shape: BoxShape.circle,
               boxShadow: achievement.isUnlocked
                   ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ]
                   : null,
@@ -1089,27 +1152,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: achievement.isUnlocked
                   ? Text(
                       achievement.icon,
-                      style: const TextStyle(fontSize: 18),
+                      style: const TextStyle(fontSize: 24),
                     )
                   : ColorFiltered(
                       colorFilter: const ColorFilter.matrix([
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0.2126, 0.7152, 0.0722, 0, 0,
-                        0, 0, 0, 1, 0,
+                        // Matriz para converter para preto e branco (dessaturação)
+                        0.299, 0.587, 0.114, 0, 0,  // Red
+                        0.299, 0.587, 0.114, 0, 0,  // Green  
+                        0.299, 0.587, 0.114, 0, 0,  // Blue
+                        0,     0,     0,     1, 0,  // Alpha
                       ]),
                       child: Text(
                         achievement.icon,
-                        style: const TextStyle(fontSize: 18),
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: Colors.grey[600],
+                        ),
                       ),
                     ),
             ),
           ),
           const SizedBox(height: 2),
           Text(
-            achievement.title.split(' ').last,
+            achievement.title.length > 8 
+                ? achievement.title.split(' ').first
+                : achievement.title,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: achievement.isUnlocked ? Colors.black : Colors.grey[500],
             ),
@@ -1117,6 +1186,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (!achievement.isUnlocked) ...[
+            Text(
+              '\$${achievement.rewardAmount.toInt()}',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Colors.green[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ],
       ),
     );
@@ -1272,11 +1352,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildAchievementCardForDialog(Achievement achievement) {
-    final progress = _achievementService.getAchievementProgress(achievement, widget.user);
+    // Calculate progress based on user stats
+    double progress = 0.0;
+    String progressText = '';
+    
+    switch (achievement.type) {
+      case AchievementType.referrals:
+        progress = widget.user.totalReferrals / achievement.targetValue;
+        progressText = '${widget.user.totalReferrals}/${achievement.targetValue} referrals';
+        break;
+      case AchievementType.earnings:
+        progress = widget.user.totalEarnings / achievement.targetValue;
+        progressText = '\$${widget.user.totalEarnings.toStringAsFixed(0)}/\$${achievement.targetValue}';
+        break;
+      case AchievementType.special:
+        progressText = 'Special achievement';
+        progress = achievement.isUnlocked ? 1.0 : 0.0;
+        break;
+      default:
+        progressText = 'Progress tracking';
+        progress = achievement.isUnlocked ? 1.0 : 0.0;
+    }
+    
+    progress = progress.clamp(0.0, 1.0);
     
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: achievement.isUnlocked ? Colors.green[50] : Colors.grey[50],
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -1308,33 +1411,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           )
                         : ColorFiltered(
                             colorFilter: const ColorFilter.matrix([
-                              0.2126, 0.7152, 0.0722, 0, 0,
-                              0.2126, 0.7152, 0.0722, 0, 0,
-                              0.2126, 0.7152, 0.0722, 0, 0,
+                              0.299, 0.587, 0.114, 0, 0,
+                              0.299, 0.587, 0.114, 0, 0,
+                              0.299, 0.587, 0.114, 0, 0,
                               0, 0, 0, 1, 0,
                             ]),
                             child: Text(
                               achievement.icon,
-                              style: const TextStyle(fontSize: 20),
+                              style: TextStyle(fontSize: 20, color: Colors.grey[600]),
                             ),
                           ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    achievement.title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: achievement.isUnlocked ? Colors.black : Colors.grey[600],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        achievement.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: achievement.isUnlocked ? Colors.black : Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (achievement.rewardAmount > 0) ...[
+                        Text(
+                          'Reward: \$${achievement.rewardAmount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 if (achievement.isUnlocked)
-                  const Icon(Icons.check_circle, color: Colors.black, size: 16),
+                  Icon(Icons.check_circle, color: Colors.green[600], size: 20),
               ],
             ),
             const SizedBox(height: 8),
@@ -1350,7 +1468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 8),
             if (!achievement.isUnlocked) ...[
               Text(
-                'Progress: ${(progress * 100).toInt()}%',
+                progressText,
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.grey[600],
@@ -1361,14 +1479,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               LinearProgressIndicator(
                 value: progress,
                 backgroundColor: Colors.grey[300],
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.green[600]!),
                 minHeight: 3,
               ),
             ] else ...[
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.black,
+                  color: Colors.green[600],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -1494,5 +1612,405 @@ class _DashboardScreenState extends State<DashboardScreen> {
         (route) => false,
       );
     }
+  }
+
+  void _showNotificationCenter() {
+    final unlockedAchievements = _achievements.where((a) => a.isUnlocked).toList();
+    
+    if (unlockedAchievements.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nenhum achievement desbloqueado ainda! 🎯'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 60),
+          child: Container(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.topRight,
+                      colors: [Colors.black, Colors.grey[800]!],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.notifications, color: Colors.white, size: 24),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Centro de Notificações',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${unlockedAchievements.length} achievements',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Scrollable content
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: unlockedAchievements.length,
+                    itemBuilder: (context, index) {
+                      final achievement = unlockedAchievements[index];
+                      return _buildNotificationCard(achievement, index);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotificationCard(Achievement achievement, int index) {
+    final timeAgo = achievement.unlockedAt != null 
+        ? _getTimeAgo(achievement.unlockedAt!)
+        : 'Recentemente';
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.green[50]!,
+            Colors.green[100]!,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green[200]!, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Emoji grande
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.green.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  achievement.icon,
+                  style: const TextStyle(fontSize: 28),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            
+            // Conteúdo
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Título e check
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          achievement.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green[600],
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Descrição
+                  Text(
+                    achievement.description,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Recompensa e tempo
+                  Row(
+                    children: [
+                      if (achievement.rewardAmount > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green[600],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '+\$${achievement.rewardAmount.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        timeAgo,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays} dia${difference.inDays > 1 ? 's' : ''} atrás';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hora${difference.inHours > 1 ? 's' : ''} atrás';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minuto${difference.inMinutes > 1 ? 's' : ''} atrás';
+    } else {
+      return 'Agora mesmo';
+    }
+  }
+
+  void _showAchievementUnlockedNotification(Achievement achievement) {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.green[400]!,
+                  Colors.green[600]!,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Emoji grande e animado
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      achievement.icon,
+                      style: const TextStyle(fontSize: 40),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Título
+                const Text(
+                  '🎉 ACHIEVEMENT UNLOCKED! 🎉',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                
+                // Nome do achievement
+                Text(
+                  achievement.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                
+                // Descrição
+                Text(
+                  achievement.description,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                
+                // Recompensa
+                if (achievement.rewardAmount > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.attach_money,
+                          color: Colors.green,
+                          size: 20,
+                        ),
+                        Text(
+                          '+\$${achievement.rewardAmount.toStringAsFixed(0)} earned!',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                
+                // Botão fechar
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.green[600],
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                  ),
+                  child: const Text(
+                    'Awesome!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    
+    // Auto fechar após 5 segundos
+    Timer(const Duration(seconds: 5), () {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 }
