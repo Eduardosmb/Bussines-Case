@@ -83,6 +83,113 @@ class SupabaseService {
 
   // ==================== USER OPERATIONS ====================
   
+  // Admin user creation/verification
+  static Future<User?> createOrVerifyAdmin() async {
+    try {
+      const adminEmail = 'admin@cloudwalk.com';
+      const adminPassword = '123456';
+      
+      print('🔑 Checking/creating admin user...');
+      
+      // Check if admin exists in our custom table
+      try {
+        final existingAdmin = await client
+            .from('users')
+            .select()
+            .eq('email', adminEmail)
+            .eq('is_admin', true)
+            .single();
+        
+        if (existingAdmin.isNotEmpty) {
+          print('✅ Admin user already exists in database');
+          
+          // Also try to create in Supabase Auth if not exists
+          try {
+            final AuthResponse authResponse = await client.auth.signUp(
+              email: adminEmail,
+              password: adminPassword,
+            );
+            if (authResponse.user != null) {
+              print('✅ Admin auth user created as well: ${authResponse.user!.id}');
+              
+              // Update the admin user ID in our custom table to match Supabase Auth
+              await client
+                  .from('users')
+                  .update({'id': authResponse.user!.id})
+                  .eq('email', adminEmail);
+              print('🔄 Updated admin ID in custom table to match Supabase Auth');
+            }
+          } catch (e) {
+            print('⚠️ Admin auth user might already exist: $e');
+          }
+          
+          return User(
+            id: existingAdmin['id'] as String,
+            email: existingAdmin['email'] as String,
+            firstName: existingAdmin['first_name'] as String,
+            lastName: existingAdmin['last_name'] as String,
+            referralCode: existingAdmin['referral_code'] as String,
+            totalReferrals: existingAdmin['total_referrals'] as int,
+            totalEarnings: (existingAdmin['total_earnings'] as num).toDouble(),
+            createdAt: DateTime.parse(existingAdmin['created_at'] as String),
+            isAdmin: true,
+          );
+        }
+      } catch (e) {
+        print('📝 Admin not found in custom table, creating...');
+      }
+      
+      // Try to create admin in Supabase Auth
+      try {
+        final AuthResponse authResponse = await client.auth.signUp(
+          email: adminEmail,
+          password: adminPassword,
+        );
+        
+        if (authResponse.user != null) {
+          print('✅ Admin auth user created: ${authResponse.user!.id}');
+        }
+      } catch (e) {
+        print('⚠️ Admin auth user might already exist: $e');
+      }
+      
+      // Create/update admin in custom users table
+      final adminData = {
+        'id': '00000000-0000-0000-0000-000000000001',
+        'email': adminEmail,
+        'first_name': 'Admin',
+        'last_name': 'CloudWalk',
+        'referral_code': 'ADMIN001',
+        'total_referrals': 0,
+        'total_earnings': 0.0,
+        'is_admin': true,
+      };
+      
+      final response = await client
+          .from('users')
+          .upsert(adminData)
+          .select()
+          .single();
+      
+      print('✅ Admin user created/updated successfully');
+      
+      return User(
+        id: response['id'] as String,
+        email: response['email'] as String,
+        firstName: response['first_name'] as String,
+        lastName: response['last_name'] as String,
+        referralCode: response['referral_code'] as String,
+        totalReferrals: response['total_referrals'] as int,
+        totalEarnings: (response['total_earnings'] as num).toDouble(),
+        createdAt: DateTime.parse(response['created_at'] as String),
+        isAdmin: true,
+      );
+    } catch (e) {
+      print('❌ Error creating/verifying admin: $e');
+      return null;
+    }
+  }
+  
   static Future<User?> registerUser({
     required String email,
     required String password,
@@ -162,6 +269,7 @@ class SupabaseService {
         totalReferrals: response['total_referrals'] as int,
         totalEarnings: (response['total_earnings'] as num).toDouble(),
         createdAt: DateTime.parse(response['created_at'] as String),
+        isAdmin: (response['is_admin'] as bool?) ?? false,
       );
     } catch (e) {
       print('❌ Error registering user: $e');
@@ -208,6 +316,7 @@ class SupabaseService {
         totalReferrals: response['total_referrals'] as int,
         totalEarnings: (response['total_earnings'] as num).toDouble(),
         createdAt: DateTime.parse(response['created_at'] as String),
+        isAdmin: (response['is_admin'] as bool?) ?? false,
       );
     } catch (e) {
       print('❌ Error logging in: $e');
@@ -252,6 +361,7 @@ class SupabaseService {
         totalReferrals: response['total_referrals'] as int,
         totalEarnings: (response['total_earnings'] as num).toDouble(),
         createdAt: DateTime.parse(response['created_at'] as String),
+        isAdmin: (response['is_admin'] as bool?) ?? false,
       );
     } catch (e) {
       print('❌ Error getting current user: $e');
@@ -541,7 +651,185 @@ class SupabaseService {
     return expected;
   }
 
-  // ==================== ANALYTICS FOR AI AGENT ====================
+  // ==================== ADMIN ANALYTICS FOR AI AGENT ====================
+  
+  static Future<Map<String, dynamic>> getAdvancedAnalytics(String adminUserId) async {
+    try {
+      print('📊 Getting advanced analytics for admin...');
+      
+      // Verify user is admin
+      final adminUser = await client
+          .from('users')
+          .select('is_admin')
+          .eq('id', adminUserId)
+          .single();
+      
+      if (!(adminUser['is_admin'] as bool? ?? false)) {
+        throw Exception('Access denied: User is not admin');
+      }
+      
+      // Get all users data
+      final allUsers = await client
+          .from('users')
+          .select('id, email, first_name, last_name, total_referrals, total_earnings, created_at, referred_by')
+          .order('created_at', ascending: false);
+      
+      // Get all referral links
+      final allReferralLinks = await client
+          .from('referral_links')
+          .select('*')
+          .order('created_at', ascending: false);
+      
+      // Get all referral clicks
+      final allClicks = await client
+          .from('referral_clicks')
+          .select('*')
+          .order('clicked_at', ascending: false);
+      
+      // Calculate metrics
+      final totalUsers = allUsers.length;
+      final totalReferrals = allUsers.fold<int>(0, (sum, user) => sum + (user['total_referrals'] as int));
+      final totalEarnings = allUsers.fold<double>(0, (sum, user) => sum + (user['total_earnings'] as num).toDouble());
+      final avgEarningsPerUser = totalUsers > 0 ? totalEarnings / totalUsers : 0.0;
+      
+      // Conversion rate (users who made referrals vs total users)
+      final usersWithReferrals = allUsers.where((user) => (user['total_referrals'] as int) > 0).length;
+      final conversionRate = totalUsers > 0 ? (usersWithReferrals / totalUsers) * 100 : 0.0;
+      
+      // Top performers
+      final topPerformers = List<Map<String, dynamic>>.from(allUsers)
+        ..sort((a, b) => (b['total_referrals'] as int).compareTo(a['total_referrals'] as int))
+        ..take(10);
+      
+      // Growth metrics (last 30 days)
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final recentUsers = allUsers.where((user) {
+        final createdAt = DateTime.parse(user['created_at'] as String);
+        return createdAt.isAfter(thirtyDaysAgo);
+      }).length;
+      
+      // Churn risk (users with no activity in 30 days - simplified)
+      final inactiveUsers = allUsers.where((user) {
+        final createdAt = DateTime.parse(user['created_at'] as String);
+        return createdAt.isBefore(thirtyDaysAgo) && (user['total_referrals'] as int) == 0;
+      }).length;
+      
+      // ROI calculation (simplified)
+      const acquisitionCost = 25.0; // Cost per referred user
+      final roi = totalUsers > 1 ? ((totalEarnings - (totalUsers * acquisitionCost)) / (totalUsers * acquisitionCost)) * 100 : 0.0;
+      
+      // Save analytics to database
+      await _saveAnalyticsToDatabase(adminUserId, {
+        'total_users': totalUsers,
+        'total_referrals': totalReferrals,
+        'total_earnings': totalEarnings,
+        'conversion_rate': conversionRate,
+        'recent_growth': recentUsers,
+        'churn_risk': inactiveUsers,
+        'roi': roi,
+        'avg_earnings': avgEarningsPerUser,
+      });
+      
+      return {
+        'overview': {
+          'total_users': totalUsers,
+          'total_referrals': totalReferrals,
+          'total_earnings': totalEarnings.toStringAsFixed(2),
+          'avg_earnings_per_user': avgEarningsPerUser.toStringAsFixed(2),
+        },
+        'performance': {
+          'conversion_rate': conversionRate.toStringAsFixed(1),
+          'users_with_referrals': usersWithReferrals,
+          'top_performers': topPerformers.take(5).toList(),
+        },
+        'growth': {
+          'new_users_30_days': recentUsers,
+          'growth_rate': totalUsers > 0 ? ((recentUsers / totalUsers) * 100).toStringAsFixed(1) : '0.0',
+        },
+        'risk_analysis': {
+          'inactive_users': inactiveUsers,
+          'churn_risk_percentage': totalUsers > 0 ? ((inactiveUsers / totalUsers) * 100).toStringAsFixed(1) : '0.0',
+        },
+        'financial': {
+          'roi_percentage': roi.toStringAsFixed(1),
+          'total_acquisition_cost': (totalUsers * acquisitionCost).toStringAsFixed(2),
+          'net_profit': (totalEarnings - (totalUsers * acquisitionCost)).toStringAsFixed(2),
+        },
+        'forecasts': {
+          'projected_users_next_month': _calculateUserGrowthForecast(recentUsers),
+          'projected_earnings_next_month': _calculateEarningsForecast(totalEarnings, recentUsers),
+          'recommendations': _generateRecommendations(conversionRate, roi, inactiveUsers, totalUsers),
+        },
+        'raw_data': {
+          'all_users': allUsers,
+          'referral_links': allReferralLinks,
+          'clicks': allClicks,
+        }
+      };
+    } catch (e) {
+      print('❌ Error getting advanced analytics: $e');
+      return {
+        'error': 'Failed to load analytics: $e',
+        'overview': {'total_users': 0, 'total_referrals': 0, 'total_earnings': '0.00'},
+      };
+    }
+  }
+  
+  static Future<void> _saveAnalyticsToDatabase(String adminUserId, Map<String, dynamic> metrics) async {
+    try {
+      await client.from('admin_analytics').insert({
+        'metric_name': 'daily_snapshot',
+        'metric_data': metrics,
+        'calculated_at': DateTime.now().toIso8601String(),
+        'created_by': adminUserId,
+      });
+    } catch (e) {
+      print('⚠️ Warning: Could not save analytics to database: $e');
+    }
+  }
+  
+  static int _calculateUserGrowthForecast(int recentUsers) {
+    // Simple projection based on recent growth
+    return (recentUsers * 1.2).round(); // 20% growth assumption
+  }
+  
+  static String _calculateEarningsForecast(double currentEarnings, int recentUsers) {
+    // Project earnings based on recent user growth and average earnings
+    final avgEarningsPerNewUser = 25.0; // Estimated
+    final projectedEarnings = currentEarnings + (recentUsers * 1.2 * avgEarningsPerNewUser);
+    return projectedEarnings.toStringAsFixed(2);
+  }
+  
+  static List<String> _generateRecommendations(double conversionRate, double roi, int inactiveUsers, int totalUsers) {
+    final recommendations = <String>[];
+    
+    if (conversionRate < 20) {
+      recommendations.add('🎯 Conversion rate is low (${conversionRate.toStringAsFixed(1)}%). Consider improving referral incentives or user onboarding.');
+    }
+    
+    if (roi < 100) {
+      recommendations.add('💰 ROI is below 100%. Review acquisition costs and optimize referral rewards.');
+    }
+    
+    if (inactiveUsers > totalUsers * 0.3) {
+      recommendations.add('⚠️ High churn risk detected. Implement re-engagement campaigns for inactive users.');
+    }
+    
+    if (conversionRate > 30) {
+      recommendations.add('✅ Excellent conversion rate! Consider scaling marketing efforts.');
+    }
+    
+    if (roi > 200) {
+      recommendations.add('🚀 Strong ROI performance! Consider increasing referral rewards to attract more users.');
+    }
+    
+    recommendations.add('📈 Monitor weekly trends to identify seasonal patterns in user acquisition.');
+    recommendations.add('🎯 Focus on top performers - they could become brand ambassadors.');
+    
+    return recommendations;
+  }
+
+  // ==================== REGULAR ANALYTICS FOR AI AGENT ====================
   
   static Future<Map<String, dynamic>> getAnalyticsData(String userId, {bool isAdmin = false}) async {
     try {

@@ -11,6 +11,7 @@ import 'services/achievement_service.dart';
 import 'services/supabase_service.dart';
 import 'models/referral_link.dart';
 import 'screens/ai_agent_screen.dart';
+import 'services/admin_ai_chat.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,11 @@ void main() async {
   try {
     await SupabaseService.initialize();
     print('✅ Supabase initialized successfully');
+    
+    // Create admin user if it doesn't exist
+    print('🔑 Creating admin user...');
+    await SupabaseService.createOrVerifyAdmin();
+    print('✅ Admin user setup completed');
   } catch (e) {
     print('❌ Error initializing Supabase: $e');
   }
@@ -404,21 +410,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
-          'CloudWalk',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-          ),
+        title: Row(
+          children: [
+            const Text(
+              'CloudWalk',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+              ),
+            ),
+            if (widget.user.isAdmin) ...[
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red[600],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'ADMIN',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.smart_toy),
-            onPressed: () => _showAIAgentDialog(),
-            tooltip: 'AI Agent',
+            icon: Icon(
+              widget.user.isAdmin ? Icons.admin_panel_settings : Icons.smart_toy,
+              color: widget.user.isAdmin ? Colors.red[600] : null,
+            ),
+            onPressed: () => widget.user.isAdmin ? _showAdminAIAgentDialog() : _showAIAgentDialog(),
+            tooltip: widget.user.isAdmin ? 'Admin AI Assistant' : 'AI Agent',
           ),
           IconButton(
             icon: const Icon(Icons.emoji_events),
@@ -1290,6 +1321,121 @@ class _DashboardScreenState extends State<DashboardScreen> {
       MaterialPageRoute(
         builder: (context) => const AIAgentScreen(),
       ),
+    );
+  }
+
+  void _showAdminAIAgentDialog() async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.red[900]!, Colors.red[700]!],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.red[300]!, width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Header especial para admin
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.red[800],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.admin_panel_settings, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'CloudWalk Admin AI Assistant',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.yellow[600],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'EXCLUSIVE',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Subtitle com funcionalidades
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.red[50],
+                  child: Column(
+                    children: [
+                      Text(
+                        'Advanced Business Intelligence & Analytics',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red[800],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Performance insights • Growth forecasts • ROI analysis • Natural language queries',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[600],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Conteúdo principal
+                Expanded(
+                  child: AdminAIChat(user: widget.user),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
