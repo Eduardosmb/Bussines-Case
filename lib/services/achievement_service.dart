@@ -11,7 +11,7 @@ class AchievementService {
   static final List<Achievement> _defaultAchievements = [
     Achievement(
       id: 'first_referral',
-      title: '🎯 First Success',
+      title: '🎯 First Steps',
       description: 'Make your first referral',
       icon: '🎯',
       targetValue: 1,
@@ -19,7 +19,7 @@ class AchievementService {
       type: AchievementType.referrals,
     ),
     Achievement(
-      id: 'five_referrals',
+      id: 'network_builder',
       title: '🔥 Network Builder',
       description: 'Refer 5 people',
       icon: '🔥',
@@ -28,8 +28,8 @@ class AchievementService {
       type: AchievementType.referrals,
     ),
     Achievement(
-      id: 'ten_referrals',
-      title: '💪 Influencer',
+      id: 'social_influencer',
+      title: '💪 Social Influencer',
       description: 'Refer 10 people',
       icon: '💪',
       targetValue: 10,
@@ -37,39 +37,48 @@ class AchievementService {
       type: AchievementType.referrals,
     ),
     Achievement(
-      id: 'twenty_referrals',
-      title: '👑 Referral King',
-      description: 'Refer 20 people',
+      id: 'referral_master',
+      title: '👑 Referral Master',
+      description: 'Refer 25 people',
       icon: '👑',
-      targetValue: 20,
+      targetValue: 25,
       rewardAmount: 100.0,
       type: AchievementType.referrals,
     ),
     Achievement(
-      id: 'first_hundred',
-      title: '💰 First \$100',
-      description: 'Earn your first \$100',
+      id: 'first_earnings',
+      title: '💰 First Earnings',
+      description: 'Earn your first \$50',
       icon: '💰',
-      targetValue: 100,
-      rewardAmount: 20.0,
+      targetValue: 50,
+      rewardAmount: 15.0,
       type: AchievementType.earnings,
     ),
     Achievement(
-      id: 'five_hundred',
-      title: '💎 High Earner',
-      description: 'Earn \$500 total',
+      id: 'money_maker',
+      title: '💎 Money Maker',
+      description: 'Earn \$200 total',
       icon: '💎',
-      targetValue: 500,
-      rewardAmount: 50.0,
+      targetValue: 200,
+      rewardAmount: 30.0,
       type: AchievementType.earnings,
     ),
     Achievement(
-      id: 'top_three',
-      title: '🏆 Leaderboard Elite',
+      id: 'high_earner',
+      title: '🏅 High Earner',
+      description: 'Earn \$500 total',
+      icon: '🏅',
+      targetValue: 500,
+      rewardAmount: 75.0,
+      type: AchievementType.earnings,
+    ),
+    Achievement(
+      id: 'leaderboard_champion',
+      title: '🏆 Champion',
       description: 'Reach top 3 on leaderboard',
       icon: '🏆',
       targetValue: 3,
-      rewardAmount: 75.0,
+      rewardAmount: 100.0,
       type: AchievementType.special,
     ),
   ];
@@ -115,7 +124,7 @@ class AchievementService {
             break;
           case AchievementType.special:
             // Check leaderboard position for special achievements
-            if (achievement.id == 'top_three') {
+            if (achievement.id == 'leaderboard_champion') {
               final rank = await getUserLeaderboardRank(user.id);
               shouldUnlock = rank <= 3 && rank > 0;
             }

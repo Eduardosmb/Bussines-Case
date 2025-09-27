@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import 'referral_link_service.dart';
 
 class AuthService {
   static const String _usersKey = 'stored_users';
@@ -82,6 +83,9 @@ class AuthService {
       // Validate referral code if provided
       User? referrer;
       if (referralCode != null && referralCode.trim().isNotEmpty) {
+        // Track that someone started registration with this referral code
+        await trackRegistrationStart(referralCode.trim().toUpperCase());
+        
         referrer = await _findUserByReferralCode(referralCode.trim().toUpperCase());
         if (referrer == null) {
           return AuthResult.error('Invalid referral code');
@@ -108,6 +112,17 @@ class AuthService {
       // Process referral rewards if someone referred this user
       if (referrer != null) {
         await _processReferralReward(referrer, user, users);
+        
+        // Track successful registration completion
+        try {
+          await ReferralLinkService.trackRegistrationCompletion(
+            referrer.referralCode, 
+            user.email
+          );
+          print('📊 Tracked registration completion for ${user.email}');
+        } catch (e) {
+          print('📊 Could not track registration completion: $e');
+        }
       }
 
       await _saveUsers(users);
@@ -223,15 +238,74 @@ class AuthService {
         .toList();
   }
 
+  // Create test user for referral testing
+  Future<void> createTestUser() async {
+    try {
+      final users = await _getStoredUsers();
+      
+      // Check if test user already exists
+      if (users.containsKey('test@cloudwalk.com')) {
+        print('📝 Test user already exists');
+        await printAllReferralCodes();
+        return;
+      }
+
+      final testUser = User(
+        id: 'test_user_001',
+        email: 'test@cloudwalk.com',
+        firstName: 'Test',
+        lastName: 'User',
+        referralCode: 'TEST123',
+        createdAt: DateTime.now(),
+        totalEarnings: 100.0,
+        totalReferrals: 2,
+      );
+
+      users['test@cloudwalk.com'] = {
+        'user': testUser.toJson(),
+        'passwordHash': _hashPassword('123456'),
+      };
+
+      await _saveUsers(users);
+      print('✅ Test user created with referral code: TEST123');
+      await printAllReferralCodes();
+    } catch (e) {
+      print('❌ Error creating test user: $e');
+    }
+  }
+
+  // Print all available referral codes for testing
+  Future<void> printAllReferralCodes() async {
+    try {
+      final users = await _getStoredUsers();
+      print('\n🎯 ===== CÓDIGOS DE REFERRAL DISPONÍVEIS =====');
+      for (var entry in users.entries) {
+        final userData = entry.value;
+        final user = User.fromJson(userData['user']);
+        print('📧 ${user.email} -> Código: ${user.referralCode}');
+      }
+      print('🎯 =============================================\n');
+    } catch (e) {
+      print('❌ Error printing referral codes: $e');
+    }
+  }
+
   // Find user by referral code
   Future<User?> _findUserByReferralCode(String referralCode) async {
+    print('🔍 Looking for referral code: $referralCode');
     final users = await _getStoredUsers();
-    for (var userData in users.values) {
+    print('🔍 Total users found: ${users.length}');
+    
+    for (var entry in users.entries) {
+      final userData = entry.value;
       final user = User.fromJson(userData['user']);
+      print('🔍 Checking user ${user.email} with code: ${user.referralCode}');
       if (user.referralCode.toUpperCase() == referralCode.toUpperCase()) {
+        print('✅ Found matching referral code!');
         return user;
       }
     }
+    print('❌ No user found with referral code: $referralCode');
     return null;
   }
 
@@ -288,7 +362,19 @@ Download the app now and start earning!
     ''';
   }
 
-  // Validate referral code format
+  // Track when someone starts registration with a referral code
+  Future<void> trackRegistrationStart(String referralCode) async {
+    try {
+      await ReferralLinkService.trackLinkClick(referralCode, 
+        ipAddress: '127.0.0.1', // Simulated
+        userAgent: 'CloudWalk Mobile App'
+      );
+    } catch (e) {
+      print('📊 Could not track registration start: $e');
+    }
+  }
+
+  // Validate referral code format  
   bool isValidReferralCodeFormat(String code) {
     return RegExp(r'^[A-Z0-9]{6}$').hasMatch(code.toUpperCase());
   }

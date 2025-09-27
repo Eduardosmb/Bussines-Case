@@ -131,7 +131,7 @@ flutter run -d android
 # Run on web
 flutter run -d web
 
-flutter run -d chrome -t lib/main_auth.dart
+flutter run -d chrome -t lib/main_full.dart
 ```
 
 ## 📁 Project Structure

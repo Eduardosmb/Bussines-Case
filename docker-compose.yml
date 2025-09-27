@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: cloudwalk_postgres
+    environment:
+      POSTGRES_DB: referral_app
+      POSTGRES_USER: referral_user
+      POSTGRES_PASSWORD: referral_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U referral_user -d referral_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: referral_backend
+    environment:
+      DATABASE_URL: postgresql://referral_user:referral_password@postgres:5432/referral_app
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:

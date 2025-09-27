@@ -3,9 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'models/user.dart';
 import 'models/achievement.dart';
+import 'models/referral_link.dart';
 import 'services/auth_service.dart';
 import 'services/achievement_service.dart';
 import 'services/mock_data_service.dart';
+import 'services/admin_service.dart';
+import 'services/referral_link_service.dart';
+// import 'screens/ai_agent_screen.dart';
+// import 'services/database_service.dart';
+// import 'services/database_auth_service.dart';
+// import 'services/database_referral_service.dart';
+// import 'screens/database_setup_screen.dart';
 
 void main() {
   runApp(const ReferralApp());
@@ -43,7 +51,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkAuthState();
+    _initializeApp();
+  }
+  
+  Future<void> _initializeApp() async {
+    // Initialize admin system
+    await AdminService.initializeDefaultAdmin();
+    // Check current auth state
+    await _checkAuthState();
   }
 
   Future<void> _checkAuthState() async {
@@ -191,6 +206,35 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 
                 // Mock Data Button (for testing)
                 if (!_isCreatingMockData) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        // Navigator.push(
+                        //   context,
+                        //   MaterialPageRoute(
+                        //     builder: (context) => const DatabaseSetupScreen(),
+                        //   ),
+                        // );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Database setup temporarily disabled')),
+                        );
+                      },
+                      icon: const Icon(Icons.storage),
+                      label: const Text('PostgreSQL Database Setup'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white, width: 2),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -873,6 +917,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final AchievementService _achievementService = AchievementService();
   List<Achievement> _achievements = [];
   List<LeaderboardEntry> _leaderboard = [];
+  ReferralLink? _userReferralLink;
   bool _isLoading = true;
   bool _isRewardsExpanded = false;
   bool _isAccountInfoExpanded = false;
@@ -888,6 +933,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final achievements = await _achievementService.getUserAchievements(widget.user.id);
       final leaderboard = await _achievementService.getLeaderboard();
       
+      // Get or create referral link
+      // Try to find by email first (mock data compatibility), then by user ID
+      final allLinks = await ReferralLinkService.getAllReferralLinks();
+      var existingLinks = allLinks.where((l) => l.userId == widget.user.email).toList();
+      if (existingLinks.isEmpty) {
+        // Fallback: try to find by actual user ID
+        existingLinks = allLinks.where((l) => l.userId == widget.user.id).toList();
+      }
+      
+      ReferralLink referralLink;
+      if (existingLinks.isEmpty) {
+        print('🔗 Creating new referral link for ${widget.user.email}');
+        referralLink = await ReferralLinkService.generateReferralLink(widget.user);
+      } else {
+        print('🔗 Found existing referral link for ${widget.user.email}: ${existingLinks.first.fullUrl}');
+        referralLink = existingLinks.first;
+      }
+      
       // Sort achievements: unlocked first, then locked
       achievements.sort((a, b) {
         if (a.isUnlocked && !b.isUnlocked) return -1;
@@ -898,6 +961,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _achievements = achievements;
         _leaderboard = leaderboard;
+        _userReferralLink = referralLink;
         _isLoading = false;
       });
 
@@ -931,38 +995,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Row(
-          children: [
-            SvgPicture.asset(
-              'assets/images/cloudwalk_logo.svg',
-              height: 32,
-              width: 100,
-            ),
-            const SizedBox(width: 12),
-            Text('Welcome, ${widget.user.firstName}!'),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1F2937),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
+        title: const Text('CloudWalk Dashboard'),
+        backgroundColor: const Color(0xFF6C5CE7),
+        foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.emoji_events),
-            onPressed: () => _showAchievementsDialog(),
-            tooltip: 'Achievements',
-          ),
-          IconButton(
-            icon: const Icon(Icons.leaderboard),
-            onPressed: () => _showLeaderboardDialog(),
-            tooltip: 'Leaderboard',
-          ),
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: () => _showShareReferralDialog(context, widget.user),
-            tooltip: 'Share Referral Code',
-          ),
           PopupMenuButton(
             onSelected: (value) async {
               if (value == 'logout') {
@@ -988,294 +1026,326 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. REFERRAL CODE SECTION - First priority
-            Container(
-              width: double.infinity,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1F2937), Color(0xFF374151)], // CloudWalk dark gradient
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF1F2937).withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // CloudWalk branding
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: SvgPicture.asset(
-                          'assets/images/cloudwalk_logo.svg',
-                          height: 20,
-                          width: 60,
-                          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                        ),
+                  // 1. WELCOME CARD
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6C5CE7), Color(0xFF74B9FF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'CloudWalk',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6C5CE7).withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome back,',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.9),
                           ),
-                          Text(
-                            'Referral Program',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white.withOpacity(0.8),
-                            ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.user.fullName,
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  
                   const SizedBox(height: 20),
-                  Text(
-                    'Your Referral Code',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.user.referralCode,
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  
+                  // 2. REFERRAL CODE CARD
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
                       color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 4,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Your Referral Code',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: const Color(0xFF1F2937),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C5CE7).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF6C5CE7).withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            _userReferralLink?.linkCode ?? widget.user.referralCode,
+                            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                              color: const Color(0xFF6C5CE7),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _copyReferralCode(context, widget.user),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6C5CE7),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.copy, size: 18),
+                                label: const Text('Copy Code'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _showShareReferralDialog(context, widget.user),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF6C5CE7),
+                                  side: const BorderSide(color: Color(0xFF6C5CE7)),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.share, size: 18),
+                                label: const Text('Share'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // 3. STATS CARDS (Balance and Referrals)
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _copyReferralCode(context, widget.user),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF1F2937),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.copy),
-                              SizedBox(width: 8),
-                              Text('Copy Code'),
-                            ],
-                          ),
+                        child: _buildStatCard(
+                          context,
+                          'Total Balance',
+                          '\$${widget.user.totalEarnings.toStringAsFixed(2)}',
+                          Icons.attach_money,
+                          const Color(0xFF00B894),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _showShareReferralDialog(context, widget.user),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.share),
-                              SizedBox(width: 8),
-                              Text('Share'),
-                            ],
-                          ),
+                        child: _buildStatCard(
+                          context,
+                          'Total Referrals',
+                          '${widget.user.totalReferrals}',
+                          Icons.people,
+                          const Color(0xFF6C5CE7),
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // 2. BALANCE SECTION
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    'Total Referrals',
-                    '${widget.user.totalReferrals}',
-                    Icons.people,
-                    const Color(0xFF1F2937), // CloudWalk dark gray
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    'Total Earnings',
-                    '\$${widget.user.totalEarnings.toStringAsFixed(2)}',
-                    Icons.attach_money,
-                    const Color(0xFF6B7280), // CloudWalk light gray
-                  ),
-                ),
-              ],
-            ),
-            
-            
-            // Rewards Info Card (Expandable)
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.monetization_on,
-                      color: Color(0xFF1F2937),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // 4. HOW IT WORKS DROPDOWN
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(
+                            Icons.info_outline,
+                            color: Color(0xFF6C5CE7),
+                          ),
+                          title: const Text(
+                            'How it Works',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                          trailing: Icon(
+                            _isRewardsExpanded ? Icons.expand_less : Icons.expand_more,
+                            color: const Color(0xFF6C5CE7),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _isRewardsExpanded = !_isRewardsExpanded;
+                            });
+                          },
+                        ),
+                        if (_isRewardsExpanded)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Divider(),
+                                const SizedBox(height: 12),
+                                _buildHowItWorksItem('💰', 'Join with a referral code', 'Get \$25 bonus'),
+                                _buildHowItWorksItem('🎯', 'Share your code', 'Earn \$50 per referral'),
+                                _buildHowItWorksItem('🚀', 'Friends join', 'They get \$25 too!'),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
-                    title: const Text(
-                      'CloudWalk Rewards Program',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    trailing: Icon(
-                      _isRewardsExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: const Color(0xFF1F2937),
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _isRewardsExpanded = !_isRewardsExpanded;
-                      });
-                    },
                   ),
-                  if (_isRewardsExpanded)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // 5. ACCOUNT INFO DROPDOWN
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(
+                            Icons.account_circle,
+                            color: Color(0xFF6C5CE7),
+                          ),
+                          title: const Text(
+                            'Account Information',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                          trailing: Icon(
+                            _isAccountInfoExpanded ? Icons.expand_less : Icons.expand_more,
+                            color: const Color(0xFF6C5CE7),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _isAccountInfoExpanded = !_isAccountInfoExpanded;
+                            });
+                          },
+                        ),
+                        if (_isAccountInfoExpanded)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Divider(),
+                                const SizedBox(height: 12),
+                                _buildInfoRow('Full Name', widget.user.fullName),
+                                _buildInfoRow('Email', widget.user.email),
+                                _buildInfoRow('Member Since', _formatDate(widget.user.createdAt)),
+                                _buildInfoRow('Referral Code', widget.user.referralCode),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // 6. ACHIEVEMENTS SECTION
+                  if (!_isLoading && _achievements.isNotEmpty) ...[
+                    Card(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Divider(),
-                          const SizedBox(height: 8),
-                          Text(
-                            '💰 \$25 bonus when you join with a referral code\n'
-                            '🎯 \$50 for each friend you refer\n'
-                            '🚀 Your friends get \$25 when they use your code!',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                          ListTile(
+                            leading: const Icon(
+                              Icons.emoji_events,
+                              color: Color(0xFF6C5CE7),
+                            ),
+                            title: const Text(
+                              'Achievements',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1F2937),
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${_achievements.where((a) => a.isUnlocked).length} of ${_achievements.length} unlocked',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                              ),
+                            ),
+                            trailing: TextButton(
+                              onPressed: _showAchievementsDialog,
+                              child: const Text(
+                                'View All',
+                                style: TextStyle(color: Color(0xFF6C5CE7)),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Column(
+                              children: [
+                                const Divider(),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: 120,
+                                  child: GridView.builder(
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 4,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                      childAspectRatio: 1,
+                                    ),
+                                    itemCount: _achievements.length,
+                                    itemBuilder: (context, index) {
+                                      final achievement = _achievements[index];
+                                      return Tooltip(
+                                        message: '${achievement.title}\n${achievement.description}',
+                                        child: _buildAchievementBadge(achievement),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
-            
-            const SizedBox(height: 32),
-            
-            // 2. USER INFORMATION SECTION (Expandable)
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.account_circle,
-                      color: Color(0xFF1F2937),
-                    ),
-                    title: const Text(
-                      'Account Information',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    trailing: Icon(
-                      _isAccountInfoExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: const Color(0xFF1F2937),
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _isAccountInfoExpanded = !_isAccountInfoExpanded;
-                      });
-                    },
-                  ),
-                  if (_isAccountInfoExpanded)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Divider(),
-                          const SizedBox(height: 8),
-                          _buildInfoRow('Name', widget.user.fullName),
-                          _buildInfoRow('Email', widget.user.email),
-                          _buildInfoRow('Member Since', _formatDate(widget.user.createdAt)),
-                          _buildInfoRow('Referral Code', widget.user.referralCode),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // 3. ACHIEVEMENTS SECTION
-            if (!_isLoading && _achievements.isNotEmpty) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Achievements',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _showAchievementsDialog,
-                    child: const Text('View All'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _achievements.take(5).length,
-                  itemBuilder: (context, index) {
-                    final achievement = _achievements[index];
-                    return Container(
-                      width: 80,
-                      margin: const EdgeInsets.only(right: 12),
-                      child: _buildAchievementBadge(achievement),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
@@ -1299,6 +1369,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Text(
               value,
               style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHowItWorksItem(String emoji, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Text(
+            emoji,
+            style: const TextStyle(fontSize: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1350,13 +1456,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Copy referral code to clipboard
   void _copyReferralCode(BuildContext context, User user) {
-    Clipboard.setData(ClipboardData(text: user.referralCode));
+    final messageToCopy = _userReferralLink?.fullUrl ?? 'Código: ${user.referralCode}';
+    Clipboard.setData(ClipboardData(text: messageToCopy));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Referral code ${user.referralCode} copied to clipboard!'),
+        content: Text('Convite copiado! 🚀 Cole no WhatsApp, Telegram ou SMS!'),
         backgroundColor: const Color(0xFF00B894),
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
       ),
+    );
+  }
+
+  // Show admin login dialog
+  void _showAdminLoginDialog() {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.admin_panel_settings, color: Color(0xFF1F2937)),
+                  const SizedBox(width: 8),
+                  const Text('Admin Login'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Access CloudWalk Analytics Dashboard',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Admin Email',
+                      prefixIcon: Icon(Icons.email),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: Icon(Icons.lock),
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '🔑 Demo Admin Access:',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                        SizedBox(height: 4),
+                        Text('Email: admin@cloudwalk.com'),
+                        Text('Password: cloudwalk123'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading ? null : () async {
+                    setState(() => isLoading = true);
+                    
+                    final admin = await AdminService.adminLogin(
+                      emailController.text.trim(),
+                      passwordController.text,
+                    );
+                    
+                    setState(() => isLoading = false);
+                    
+                    if (admin != null) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(this.context).showSnackBar(
+                        SnackBar(
+                          content: Text('Welcome, ${admin.name}! 🎯'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      // Trigger UI refresh to show AI Agent button
+                      this.setState(() {});
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid admin credentials'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1F2937),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isLoading 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Login'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1667,13 +1899,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           height: 60,
           decoration: BoxDecoration(
             color: achievement.isUnlocked
-                ? const Color(0xFF1F2937) // CloudWalk dark
+                ? const Color(0xFF6C5CE7) // Company purple
                 : Colors.grey[300],
             shape: BoxShape.circle,
             boxShadow: achievement.isUnlocked
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF1F2937).withOpacity(0.3), // CloudWalk dark
+                      color: const Color(0xFF6C5CE7).withOpacity(0.3), // Company purple
                       blurRadius: 8,
                       spreadRadius: 2,
                     ),
