@@ -43,16 +43,12 @@ class _AIAgentScreenState extends State<AIAgentScreen>
 
   Future<void> _initializeAgent() async {
     try {
-      print('🔍 DEBUG - Initializing AI Agent...');
       // Check if user is admin
       _isAdmin = await AdminService.hasAdminAccess();
-      print('🔍 DEBUG - Admin access: $_isAdmin');
 
       await _loadAnalytics();
       await _addWelcomeMessage();
-      print('✅ DEBUG - AI Agent initialized successfully');
     } catch (e) {
-      print('❌ DEBUG - Error initializing AI Agent: $e');
       // Don't close the screen, just show error state
       setState(() {
         _chatHistory.add(AIResponse(
@@ -76,9 +72,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
 
   Future<void> _addWelcomeMessage() async {
     try {
-      print('🔍 DEBUG - Adding welcome message...');
       final isConfigured = await OpenAIService.isConfigured();
-      print('🔍 DEBUG - OpenAI configured: $isConfigured');
 
     String welcomeMessage;
     List<String> insights;
@@ -161,9 +155,7 @@ class _AIAgentScreenState extends State<AIAgentScreen>
     setState(() {
       _chatHistory.add(welcomeResponse);
     });
-    print('✅ DEBUG - Welcome message added successfully');
     } catch (e) {
-      print('❌ DEBUG - Error adding welcome message: $e');
       // Add fallback welcome message
       setState(() {
         _chatHistory.add(AIResponse(
@@ -179,15 +171,12 @@ class _AIAgentScreenState extends State<AIAgentScreen>
 
   Future<void> _loadAnalytics() async {
     try {
-      print('🔍 DEBUG - Loading analytics...');
       const analytics = null;
       setState(() {
         _analytics = analytics;
         _isLoadingAnalytics = false;
       });
-      print('✅ DEBUG - Analytics loaded successfully');
     } catch (e) {
-      print('❌ DEBUG - Error loading analytics: $e');
       setState(() {
         _isLoadingAnalytics = false;
       });

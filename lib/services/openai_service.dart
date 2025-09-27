@@ -27,7 +27,6 @@ class OpenAIService {
       final contextData = await _gatherContextDataWithUser();
       
       // Create a comprehensive system prompt with CloudWalk context
-      print('🔍 DEBUG - Final Context Data: $contextData');
       final systemPrompt = '''
 You are CloudWalk's AI Assistant. Your role is to help users understand their referral performance, achievements, and general platform features.
 
@@ -92,8 +91,6 @@ GUIDELINES:
 - If asked about unrelated topics, politely redirect to CloudWalk/Infinity Pay
 - IMPORTANT: Use the EXACT numbers from the USER'S CURRENT PERFORMANCE section above
 ''';
-      
-      print('🔍 DEBUG - System Prompt: ${systemPrompt.substring(0, 500)}...');
       
       // Call OpenAI API
       final chatCompletion = await OpenAI.instance.chat.create(
@@ -352,9 +349,6 @@ Format as a simple list of recommendations.
     final currentUser = contextData['currentUser'];
     final userAchievements = contextData['userAchievements'] as List<dynamic>? ?? [];
     
-    print('🔍 DEBUG - Current User Data: $currentUser');
-    print('🔍 DEBUG - User Achievements: $userAchievements');
-    
     if (currentUser == null) {
       return 'User not logged in or data not available.';
     }
@@ -370,8 +364,6 @@ Format as a simple list of recommendations.
     final firstName = currentUser['firstName'] ?? currentUser['first_name'] ?? 'User';
     final lastName = currentUser['lastName'] ?? currentUser['last_name'] ?? '';
     final referralCode = currentUser['referralCode'] ?? currentUser['referral_code'] ?? 'Not available';
-    
-    print('🔍 DEBUG - Extracted values: referrals=$totalReferrals, earnings=$totalEarnings');
     
     return '''
 USER'S CURRENT PERFORMANCE (You ALREADY have this data - use it in your response):
