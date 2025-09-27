@@ -130,14 +130,14 @@ Ask me anything about your business data:
 
       // Prepare comprehensive business context for GPT
       final businessContext = '''
-You are CloudWalk's exclusive Admin AI Assistant with access to real-time business analytics. 
-
-Current Business Data:
-📊 OVERVIEW:
-• Total Users: ${_analyticsData?['overview']?['total_users'] ?? 0}
-• Total Referrals: ${_analyticsData?['overview']?['total_referrals'] ?? 0}  
-• Total Earnings: \$${_analyticsData?['overview']?['total_earnings'] ?? '0'}
-• Avg Earnings per User: \$${_analyticsData?['overview']?['avg_earnings_per_user'] ?? '0'}
+        You are CloudWalk's exclusive Admin AI Assistant with access to real-time business analytics. 
+        
+        Current Business Data:
+        📊 OVERVIEW:
+        • Total Users: ${_analyticsData?['overview']?['total_users'] ?? 0}
+        • Total Referrals: ${_analyticsData?['overview']?['total_referrals'] ?? 0}  
+        • Total Earnings: \$${_analyticsData?['overview']?['total_earnings'] ?? '0'}
+        • Avg Earnings per User: \$${_analyticsData?['overview']?['avg_earnings_per_user'] ?? '0'}
 
 📈 PERFORMANCE:
 • Conversion Rate: ${_analyticsData?['performance']?['conversion_rate'] ?? '0'}%
@@ -149,7 +149,12 @@ Current Business Data:
 
 ⚠️ RISK ANALYSIS:
 • Churn Risk: ${_analyticsData?['risk_analysis']?['churn_risk_percentage'] ?? '0'}%
-• Inactive Users: ${_analyticsData?['risk_analysis']?['inactive_users'] ?? 0}
+• Inactive Users (7+ days, 0 referrals): ${_analyticsData?['risk_analysis']?['high_churn_risk_count'] ?? 0}
+• Very High Risk (14+ days, 0 referrals): ${_analyticsData?['risk_analysis']?['very_high_churn_risk_count'] ?? 0}
+• Churned Users (30+ days, 0 referrals): ${_analyticsData?['risk_analysis']?['churned_users_count'] ?? 0}
+
+👥 OLDEST INACTIVE USERS:
+${(_analyticsData?['risk_analysis']?['oldest_inactive_users'] as List?)?.take(3).map((user) => '• ${user['name']} (${user['email']}): ${user['days_since_created']} days without referrals').join('\n') ?? 'No inactive users found'}
 
 💰 FINANCIAL:
 • ROI: ${_analyticsData?['financial']?['roi_percentage'] ?? '0'}%
@@ -166,16 +171,17 @@ ${(_analyticsData?['performance']?['top_performers'] as List?)?.take(3).map((use
 📋 AI RECOMMENDATIONS:
 ${(_analyticsData?['forecasts']?['recommendations'] as List?)?.join('\n• ') ?? 'No specific recommendations available'}
 
-Your role:
-- Provide intelligent analysis of business metrics
-- Explain concepts clearly (like conversion rate, churn, ROI) 
-- Give actionable insights and strategic recommendations
-- Use emojis and formatting to make responses engaging
-- Reference the real data provided above in your answers
-- Be conversational but professional
-- Focus on growth, optimization, and business intelligence
-
-Answer the following admin question using the business context above:
+        Your role:
+        - Provide intelligent analysis of business metrics
+        - Explain concepts clearly (like conversion rate, churn, ROI) 
+        - Give actionable insights and strategic recommendations
+        - Use emojis and formatting to make responses engaging
+        - Reference the real data provided above in your answers
+        - Be conversational but professional
+        - Focus on growth, optimization, and business intelligence
+        - Always respond in English
+        
+        Answer the following admin question using the business context above:
 ''';
 
       final fullPrompt = businessContext + '\n\nQuestion: $query';

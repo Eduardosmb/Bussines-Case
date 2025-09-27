@@ -96,15 +96,15 @@ class OpenAIService {
       // More detailed error handling
       if (e.toString().contains('does not exist') || e.toString().contains('404')) {
         return _createErrorResponse(userQuery, 
-          'O modelo GPT-3.5-turbo não está disponível. Verifique se sua conta OpenAI tem créditos suficientes e acesso à API.');
+          'The GPT-3.5-turbo model is not available. Check if your OpenAI account has sufficient credits and API access.');
       } else if (e.toString().contains('401') || e.toString().contains('authentication')) {
         return _createErrorResponse(userQuery,
-          'Chave da API inválida. Verifique se a OPENAI_API_KEY no arquivo .env está correta.');
+          'Invalid API key. Check if the OPENAI_API_KEY in the .env file is correct.');
       } else if (e.toString().contains('429') || e.toString().contains('quota')) {
         return _createErrorResponse(userQuery,
-          'Limite de taxa excedido ou créditos insuficientes. Verifique sua conta OpenAI em platform.openai.com/settings/billing');
+          'Rate limit exceeded or insufficient credits. Check your OpenAI account at platform.openai.com/settings/billing');
       } else {
-        return _createErrorResponse(userQuery, 'Erro de conexão: ${e.toString()}');
+        return _createErrorResponse(userQuery, 'Connection error: ${e.toString()}');
       }
     }
   }
@@ -385,17 +385,17 @@ Responda à pergunta do usuário de forma personalizada, educativa e motivaciona
   static AIResponse _createErrorResponse(String query, String error) {
     return AIResponse(
       query: query,
-      response: "❌ Desculpe, ocorreu um erro ao processar sua consulta. Verifique se a chave da API do OpenAI está configurada corretamente.\n\nErro: $error",
+      response: "❌ Sorry, an error occurred while processing your query. Check if the OpenAI API key is configured correctly.\n\nError: $error",
       insights: [
-        "Verificar configuração da API do OpenAI",
-        "Confirmar conectividade com a internet",
-        "Verificar se a chave da API é válida",
+        "Check OpenAI API configuration",
+        "Confirm internet connectivity",
+        "Verify if API key is valid",
       ],
       data: {},
       suggestedQuestions: [
-        "Como configurar a API do OpenAI?",
-        "Verificar status do sistema",
-        "Tentar novamente",
+        "How to configure OpenAI API?",
+        "Check system status",
+        "Try again",
       ],
       timestamp: DateTime.now(),
     );
@@ -504,18 +504,18 @@ Seu programa está na fase de crescimento inicial. Com otimizações no funil e 
       final contextData = await _gatherContextData();
       
       final prompt = '''
-Com base nos dados do programa de indicação da CloudWalk, forneça 5 recomendações específicas e acionáveis de marketing:
+Based on CloudWalk's referral program data, provide 5 specific and actionable marketing recommendations:
 
 ${jsonEncode(contextData)}
 
-Foque em:
-1. Melhorar taxas de conversão
-2. Reduzir churn
-3. Aumentar atividade de indicação
-4. Otimizar experiência do usuário
-5. Estratégias de crescimento para o mercado brasileiro
+Focus on:
+1. Improve conversion rates
+2. Reduce churn
+3. Increase referral activity
+4. Optimize user experience
+5. Growth strategies for the Brazilian market
 
-Formate como uma lista simples de recomendações em português brasileiro.
+Format as a simple list of recommendations in English.
 ''';
       
       final completion = await OpenAI.instance.chat.create(

@@ -83,6 +83,39 @@ class SupabaseService {
 
   // ==================== USER OPERATIONS ====================
   
+  // Create test users in Supabase Auth (for development)
+  static Future<void> createTestUsersInAuth() async {
+    final testUsers = [
+      {'email': 'marcos.antonio@gmail.com', 'password': '123456'},
+      {'email': 'ana.silva@gmail.com', 'password': '123456'},
+      {'email': 'bruno.santos@gmail.com', 'password': '123456'},
+      {'email': 'carla.oliveira@gmail.com', 'password': '123456'},
+      {'email': 'diego.costa@gmail.com', 'password': '123456'},
+    ];
+    
+    for (final user in testUsers) {
+      try {
+        final AuthResponse authResponse = await client.auth.signUp(
+          email: user['email']!,
+          password: user['password']!,
+        );
+        
+        if (authResponse.user != null) {
+          print('✅ Test user created in Auth: ${user['email']}');
+          
+          // Update the user ID in our custom table to match Supabase Auth
+          await client
+              .from('users')
+              .update({'id': authResponse.user!.id})
+              .eq('email', user['email']!);
+          print('🔄 Updated ID for ${user['email']}');
+        }
+      } catch (e) {
+        print('⚠️ User ${user['email']} might already exist in Auth: $e');
+      }
+    }
+  }
+
   // Admin user creation/verification
   static Future<User?> createOrVerifyAdmin() async {
     try {
@@ -708,11 +741,29 @@ class SupabaseService {
         return createdAt.isAfter(thirtyDaysAgo);
       }).length;
       
-      // Churn risk (users with no activity in 30 days - simplified)
-      final inactiveUsers = allUsers.where((user) {
+      // Churn risk analysis - more granular approach
+      final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+      final fourteenDaysAgo = DateTime.now().subtract(const Duration(days: 14));
+      
+      // Users created more than 7 days ago with 0 referrals (high churn risk)
+      final highChurnRisk = allUsers.where((user) {
+        final createdAt = DateTime.parse(user['created_at'] as String);
+        return createdAt.isBefore(sevenDaysAgo) && (user['total_referrals'] as int) == 0;
+      }).toList();
+      
+      // Users created more than 14 days ago with 0 referrals (very high churn risk)
+      final veryHighChurnRisk = allUsers.where((user) {
+        final createdAt = DateTime.parse(user['created_at'] as String);
+        return createdAt.isBefore(fourteenDaysAgo) && (user['total_referrals'] as int) == 0;
+      }).toList();
+      
+      // Users created more than 30 days ago with 0 referrals (churned)
+      final churnedUsers = allUsers.where((user) {
         final createdAt = DateTime.parse(user['created_at'] as String);
         return createdAt.isBefore(thirtyDaysAgo) && (user['total_referrals'] as int) == 0;
-      }).length;
+      }).toList();
+      
+      final inactiveUsers = highChurnRisk.length;
       
       // ROI calculation (simplified)
       const acquisitionCost = 25.0; // Cost per referred user
@@ -726,6 +777,11 @@ class SupabaseService {
         'conversion_rate': conversionRate,
         'recent_growth': recentUsers,
         'churn_risk': inactiveUsers,
+        'detailed_churn': {
+          'high_risk': highChurnRisk.length,
+          'very_high_risk': veryHighChurnRisk.length,
+          'churned': churnedUsers.length,
+        },
         'roi': roi,
         'avg_earnings': avgEarningsPerUser,
       });
@@ -749,6 +805,16 @@ class SupabaseService {
         'risk_analysis': {
           'inactive_users': inactiveUsers,
           'churn_risk_percentage': totalUsers > 0 ? ((inactiveUsers / totalUsers) * 100).toStringAsFixed(1) : '0.0',
+          'high_churn_risk_count': highChurnRisk.length,
+          'very_high_churn_risk_count': veryHighChurnRisk.length,
+          'churned_users_count': churnedUsers.length,
+          'oldest_inactive_users': highChurnRisk.take(5).map((user) => {
+            'name': '${user['first_name']} ${user['last_name']}',
+            'email': user['email'],
+            'days_since_created': DateTime.now().difference(DateTime.parse(user['created_at'] as String)).inDays,
+            'total_referrals': user['total_referrals'],
+            'created_at': user['created_at'],
+          }).toList(),
         },
         'financial': {
           'roi_percentage': roi.toStringAsFixed(1),

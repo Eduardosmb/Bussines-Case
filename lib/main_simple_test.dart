@@ -40,6 +40,11 @@ void main() async {
     print('🔑 Creating admin user...');
     await SupabaseService.createOrVerifyAdmin();
     print('✅ Admin user setup completed');
+    
+    // Create test users in Auth (for development)
+    print('👥 Creating test users in Auth...');
+    await SupabaseService.createTestUsersInAuth();
+    print('✅ Test users setup completed');
   } catch (e) {
     print('❌ Error initializing Supabase: $e');
   }
@@ -743,7 +748,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(height: 10),
                                   Center(
                                     child: Text(
-                                      'Clique para ver mais ${_achievements.length - 3} achievements',
+                                      'Click to see ${_achievements.length - 3} more achievements',
                                       style: TextStyle(
                                         color: Colors.grey[500],
                                         fontSize: 12,
@@ -1755,7 +1760,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Icon(Icons.error, size: 48, color: Colors.red[400]),
                               const SizedBox(height: 16),
                               Text(
-                                'Erro ao carregar leaderboard',
+                                'Error loading leaderboard',
                                 style: TextStyle(color: Colors.red[600]),
                               ),
                             ],
@@ -2033,7 +2038,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (unlockedAchievements.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Nenhum achievement desbloqueado ainda! 🎯'),
+          content: Text('No achievements unlocked yet! 🎯'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),

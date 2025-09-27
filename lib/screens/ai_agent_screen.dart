@@ -195,8 +195,8 @@ class _AIAgentScreenState extends State<AIAgentScreen>
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Erro no Teste'),
-          content: Text('Falha ao testar: $e'),
+          title: const Text('Test Error'),
+          content: Text('Failed to test: $e'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -317,18 +317,20 @@ class _AIAgentScreenState extends State<AIAgentScreen>
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.insights),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ChurnAnalyticsScreen(),
-                ),
-              );
-            },
-            tooltip: 'Análise de Abandono',
-          ),
+          // Churn Analytics only for admins
+          if (_isAdmin)
+            IconButton(
+              icon: const Icon(Icons.insights),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ChurnAnalyticsScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Análise de Abandono',
+            ),
           IconButton(
             icon: const Icon(Icons.wifi_find),
             onPressed: _testOpenAIConnection,
@@ -343,11 +345,13 @@ class _AIAgentScreenState extends State<AIAgentScreen>
       ),
       body: Column(
         children: [
-          // Analytics Overview Card
-          if (_isLoadingAnalytics)
-            const LinearProgressIndicator()
-          else if (_analytics != null)
-            _buildAnalyticsOverview(),
+          // Analytics Overview Card (only for admins)
+          if (_isAdmin) ...[
+            if (_isLoadingAnalytics)
+              const LinearProgressIndicator()
+            else if (_analytics != null)
+              _buildAnalyticsOverview(),
+          ],
           
           // Chat Interface
           Expanded(

@@ -1,17 +1,17 @@
 -- CRIAR ACHIEVEMENTS DO SISTEMA CLOUDWALK
 -- Execute este script no Supabase SQL Editor
 
--- Inserir os achievements solicitados
+-- Insert requested achievements in English
 INSERT INTO public.achievements (title, description, icon, type, target_value, reward_amount) VALUES
-('Primeiro Sucesso', 'Seu código foi usado 1 vez', '🎯', 'referrals', 1, 10.00),
-('Influencer Bronze', 'Seu código foi usado 5 vezes', '🏆', 'referrals', 5, 15.00),
-('Influencer Prata', 'Seu código foi usado 15 vezes', '👑', 'referrals', 15, 25.00),
-('Influencer Ouro', 'Seu código foi usado 30 vezes', '💎', 'referrals', 30, 50.00),
-('Top Performer', 'Ficou no top 3 do leaderboard', '🥇', 'special', 3, 25.00),
-('Milionário', 'Acumulou mais de $1000', '💰', 'earnings', 1000, 100.00)
+('First Success', 'Your referral code was used 1 time', '🎯', 'referrals', 1, 10.00),
+('Bronze Influencer', 'Your referral code was used 5 times', '🏆', 'referrals', 5, 15.00),
+('Silver Influencer', 'Your referral code was used 15 times', '👑', 'referrals', 15, 25.00),
+('Gold Influencer', 'Your referral code was used 30 times', '💎', 'referrals', 30, 50.00),
+('Top Performer', 'Reached top 3 in leaderboard', '🥇', 'special', 3, 25.00),
+('Millionaire', 'Accumulated more than $1000 in earnings', '💰', 'earnings', 1000, 100.00)
 ON CONFLICT DO NOTHING;
 
--- Verificar achievements criados
+-- Verify created achievements
 SELECT 
     title,
     description,
@@ -29,8 +29,8 @@ ORDER BY
     END,
     target_value;
 
--- Contar achievements criados
+-- Count created achievements
 SELECT 
     COUNT(*) as total_achievements,
-    '✅ Achievements criados com sucesso!' as status
+    '✅ Achievements created successfully!' as status
 FROM public.achievements;
