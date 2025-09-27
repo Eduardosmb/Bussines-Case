@@ -1509,98 +1509,365 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.leaderboard, color: Colors.black),
-              SizedBox(width: 8),
-              Text(
-                'Leaderboard',
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: SizedBox(
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+          child: Container(
             width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.8,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Top Referrers This Month',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.black,
+                // Header with gradient
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.topRight,
+                      colors: [Colors.amber[600]!, Colors.amber[800]!],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.leaderboard, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Leaderboard CloudWalk',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: 5, // Mock data
-                  itemBuilder: (context, index) {
-                    final isCurrentUser = index == 2; // Mock current user position
-                    final names = ['Alex Johnson', 'Maria Silva', widget.user.fullName, 'John Doe', 'Sarah Wilson'];
-                    final referrals = [25, 22, widget.user.totalReferrals, 15, 12];
-                    final earnings = [1250, 1100, widget.user.totalEarnings, 750, 600];
-                    
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: isCurrentUser ? Colors.black.withOpacity(0.1) : null,
-                        borderRadius: BorderRadius.circular(8),
-                        border: isCurrentUser ? Border.all(color: Colors.black) : null,
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: index < 3 ? Colors.black : Colors.grey[300],
-                          child: Text(
-                            '${index + 1}',
-                            style: TextStyle(
-                              color: index < 3 ? Colors.white : Colors.grey[600],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          names[index],
-                          style: TextStyle(
-                            fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.normal,
-                            color: isCurrentUser ? Colors.black : Colors.grey[700],
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${referrals[index]} referrals',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        trailing: Text(
-                          '\$${earnings[index].toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isCurrentUser ? Colors.black : Colors.grey[700],
-                          ),
+                
+                // Subtitle
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.amber[50],
+                  child: Column(
+                    children: [
+                      Text(
+                        'Ranking de Referrals',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.amber[800],
                         ),
                       ),
-                    );
-                  },
+                      const SizedBox(height: 4),
+                      Text(
+                        'Top 3 ganham prêmios automáticos! 🏆',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.amber[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Leaderboard content
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: SupabaseService.getLeaderboard(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: Colors.amber),
+                        );
+                      }
+                      
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error, size: 48, color: Colors.red[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Erro ao carregar leaderboard',
+                                style: TextStyle(color: Colors.red[600]),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      final leaderboard = snapshot.data ?? [];
+                      
+                      if (leaderboard.isEmpty) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.people_outline, size: 48, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'Nenhum usuário encontrado',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: leaderboard.length,
+                        itemBuilder: (context, index) {
+                          final user = leaderboard[index];
+                          final isCurrentUser = user['id'] == widget.user.id;
+                          final rank = user['rank'] as int;
+                          
+                          return _buildLeaderboardCard(user, isCurrentUser, rank);
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Close'),
-            ),
-          ],
         );
       },
     );
+  }
+
+  Widget _buildLeaderboardCard(Map<String, dynamic> user, bool isCurrentUser, int rank) {
+    Color cardColor = Colors.white;
+    Color borderColor = Colors.grey[300]!;
+    Widget? trailingWidget;
+    
+    // Special styling for top 3
+    if (rank <= 3) {
+      switch (rank) {
+        case 1:
+          cardColor = Colors.amber[50]!;
+          borderColor = Colors.amber[400]!;
+          trailingWidget = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.amber[600],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '+\$100',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+          break;
+        case 2:
+          cardColor = Colors.grey[100]!;
+          borderColor = Colors.grey[400]!;
+          trailingWidget = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '+\$50',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+          break;
+        case 3:
+          cardColor = Colors.orange[50]!;
+          borderColor = Colors.orange[400]!;
+          trailingWidget = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.orange[600],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '+\$25',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+          break;
+      }
+    }
+    
+    // Override for current user
+    if (isCurrentUser) {
+      cardColor = Colors.blue[50]!;
+      borderColor = Colors.blue[500]!;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: borderColor,
+          width: isCurrentUser ? 2 : 1,
+        ),
+        boxShadow: [
+          if (rank <= 3 || isCurrentUser)
+            BoxShadow(
+              color: borderColor.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: _getRankColor(rank),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: _getRankColor(rank).withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              _getRankEmoji(rank),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                user['full_name'] as String,
+                style: TextStyle(
+                  fontWeight: isCurrentUser ? FontWeight.bold : FontWeight.w600,
+                  color: isCurrentUser ? Colors.blue[800] : Colors.black87,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            if (isCurrentUser) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue[600],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'VOCÊ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${user['total_referrals']} referrals • \$${(user['total_earnings'] as num).toStringAsFixed(0)} ganhos',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
+            ),
+            if (rank <= 3) ...[
+              const SizedBox(height: 4),
+              Text(
+                _getRankTitle(rank),
+                style: TextStyle(
+                  color: _getRankTextColor(rank),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+        trailing: trailingWidget,
+      ),
+    );
+  }
+
+  Color _getRankColor(int rank) {
+    switch (rank) {
+      case 1: return Colors.amber[600]!;
+      case 2: return Colors.grey[600]!;
+      case 3: return Colors.orange[600]!;
+      default: return Colors.grey[400]!;
+    }
+  }
+
+  String _getRankEmoji(int rank) {
+    switch (rank) {
+      case 1: return '🥇';
+      case 2: return '🥈';
+      case 3: return '🥉';
+      default: return '#$rank';
+    }
+  }
+
+  String _getRankTitle(int rank) {
+    switch (rank) {
+      case 1: return '🏆 Campeão - Prêmio: \$100';
+      case 2: return '🥈 Vice-Campeão - Prêmio: \$50';
+      case 3: return '🥉 Terceiro Lugar - Prêmio: \$25';
+      default: return '';
+    }
+  }
+
+  Color _getRankTextColor(int rank) {
+    switch (rank) {
+      case 1: return Colors.amber[800]!;
+      case 2: return Colors.grey[700]!;
+      case 3: return Colors.orange[800]!;
+      default: return Colors.grey[600]!;
+    }
   }
 
   void _handleLogout() async {

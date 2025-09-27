@@ -442,6 +442,94 @@ class SupabaseService {
     }
   }
 
+  // ==================== LEADERBOARD OPERATIONS ====================
+  
+  static Future<List<Map<String, dynamic>>> getLeaderboard() async {
+    try {
+      print('📊 Getting leaderboard data...');
+      
+      // Get all users ordered by total_referrals (descending), then by total_earnings
+      final response = await client
+          .from('users')
+          .select('id, email, first_name, last_name, referral_code, total_referrals, total_earnings, created_at')
+          .order('total_referrals', ascending: false)
+          .order('total_earnings', ascending: false)
+          .order('created_at', ascending: true); // Earlier users win ties
+      
+      print('✅ Found ${response.length} users for leaderboard');
+      
+      // Add rank to each user
+      final leaderboard = <Map<String, dynamic>>[];
+      for (int i = 0; i < response.length; i++) {
+        final user = Map<String, dynamic>.from(response[i]);
+        user['rank'] = i + 1;
+        user['full_name'] = '${user['first_name']} ${user['last_name']}';
+        leaderboard.add(user);
+      }
+      
+      // Award prizes to top 3 if they haven't been awarded yet
+      await _awardLeaderboardPrizes(leaderboard);
+      
+      return leaderboard;
+    } catch (e) {
+      print('❌ Error getting leaderboard: $e');
+      return [];
+    }
+  }
+  
+  static Future<void> _awardLeaderboardPrizes(List<Map<String, dynamic>> leaderboard) async {
+    try {
+      final prizes = [
+        {'rank': 1, 'amount': 100.0, 'title': 'Campeão 🥇'},
+        {'rank': 2, 'amount': 50.0, 'title': 'Vice-Campeão 🥈'},
+        {'rank': 3, 'amount': 25.0, 'title': 'Terceiro Lugar 🥉'},
+      ];
+      
+      for (final prize in prizes) {
+        final userRank = prize['rank'] as int;
+        if (leaderboard.length >= userRank) {
+          final userIndex = userRank - 1;
+          final user = leaderboard[userIndex];
+          final userId = user['id'] as String;
+          final prizeAmount = prize['amount'] as double;
+          
+          // Check if user already received this specific leaderboard prize
+          final existingPrize = await client
+              .from('user_achievements')
+              .select()
+              .eq('user_id', userId)
+              .eq('achievement_id', 'leaderboard_${userRank}')
+              .limit(1);
+          
+          if (existingPrize.isEmpty) {
+            print('🏆 Awarding leaderboard prize to rank $userRank: ${user['full_name']}');
+            
+            // Create achievement record
+            await client.from('user_achievements').insert({
+              'user_id': userId,
+              'achievement_id': 'leaderboard_${userRank}',
+              'is_unlocked': true,
+              'unlocked_at': DateTime.now().toIso8601String(),
+              'progress': 100,
+            });
+            
+            // Add prize money
+            await client
+                .from('users')
+                .update({
+                  'total_earnings': (user['total_earnings'] as num) + prizeAmount,
+                })
+                .eq('id', userId);
+            
+            print('💰 Added \$${prizeAmount.toStringAsFixed(0)} to ${user['full_name']} for ${prize['title']}');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error awarding leaderboard prizes: $e');
+    }
+  }
+
   // ==================== ANALYTICS FOR AI AGENT ====================
   
   static Future<Map<String, dynamic>> getAnalyticsData(String userId, {bool isAdmin = false}) async {
